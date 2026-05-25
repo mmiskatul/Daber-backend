@@ -57,5 +57,5 @@ app.use("/onboarding", onboardingRoutes);
 app.use(errorHandler);
 
 app.listen(config.port, () => {
-  console.log(`Daber backend listening on port ${config.port}`);
+  console.log(`Daber backend listening on port http://localhost:${config.port}`);
 });
