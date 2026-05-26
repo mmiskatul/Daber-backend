@@ -4,6 +4,7 @@ import admin from "../firebaseAdmin";
 import { AppError } from "../errors";
 import { asyncHandler } from "../middleware/asyncHandler";
 import { authenticateFirebaseUser } from "../middleware/authenticateFirebaseUser";
+import { ensureUserDocument, normalizeString } from "../userProfile";
 
 type OnboardingBody = {
   native?: string;
@@ -26,15 +27,6 @@ const ALLOWED_VOICE = new Set(["dana", "noam", "shira"]);
 
 const router = Router();
 const db = admin.firestore();
-
-function normalizeString(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
 
 function ensureAllowed(value: string | null, allowed: Set<string>, field: string): string {
   if (!value || !allowed.has(value)) {
@@ -87,11 +79,7 @@ router.get(
       throw new AppError(401, "UNAUTHENTICATED", "Authenticated user was not attached to the request.");
     }
 
-    const snapshot = await db.collection("users").doc(req.firebaseUser.uid).get();
-
-    if (!snapshot.exists) {
-      throw new AppError(404, "USER_NOT_FOUND", "User record not found.");
-    }
+    const { snapshot } = await ensureUserDocument(req.firebaseUser);
 
     const data = snapshot.data();
 
@@ -143,7 +131,7 @@ router.post(
     }
 
     const onboarding = parseOnboardingBody(req.body);
-    const userRef = db.collection("users").doc(req.firebaseUser.uid);
+    const { ref: userRef, isNewUser } = await ensureUserDocument(req.firebaseUser);
 
     await userRef.set(
       {
@@ -158,7 +146,10 @@ router.post(
     res.status(200).json({
       status: true,
       message: "Onboarding saved successfully.",
-      details: onboarding
+      details: {
+        ...onboarding,
+        isNewUser
+      }
     });
   })
 );

@@ -1,51 +1,12 @@
 import { Router } from "express";
-import { FieldValue } from "firebase-admin/firestore";
-import admin from "../firebaseAdmin";
 import { AppError } from "../errors";
 import { asyncHandler } from "../middleware/asyncHandler";
 import { authenticateFirebaseUser } from "../middleware/authenticateFirebaseUser";
-
-type SyncUserBody = {
-  firstName?: string;
-  lastName?: string;
-  phone?: string;
-  username?: string;
-  avatarUrl?: string;
-  displayName?: string;
-  photoURL?: string;
-};
-
-type UserProfileFields = {
-  firstName: string | null;
-  lastName: string | null;
-  phone: string | null;
-  username: string | null;
-  avatarUrl: string | null;
-};
+import admin from "../firebaseAdmin";
+import { ensureUserDocument } from "../userProfile";
 
 const router = Router();
 const db = admin.firestore();
-
-function normalizeString(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function pickProfileFields(body: unknown): UserProfileFields {
-  const payload = (body ?? {}) as SyncUserBody;
-
-  return {
-    firstName: normalizeString(payload.firstName),
-    lastName: normalizeString(payload.lastName),
-    phone: normalizeString(payload.phone),
-    username: normalizeString(payload.username),
-    avatarUrl: normalizeString(payload.avatarUrl)
-  };
-}
 
 /**
  * @openapi
@@ -82,40 +43,15 @@ router.post(
       throw new AppError(401, "UNAUTHENTICATED", "Authenticated user was not attached to the request.");
     }
 
-    const decoded = req.firebaseUser;
-    const uid = decoded.uid;
-    const body = (req.body ?? {}) as SyncUserBody;
-    const profile = pickProfileFields(body);
-
-    const userRef = db.collection("users").doc(uid);
-    const now = FieldValue.serverTimestamp();
-
-    const payload = {
-      uid,
-      email: decoded.email ?? null,
-      emailVerified: Boolean(decoded.email_verified),
-      displayName: decoded.name ?? normalizeString(body.displayName),
-      photoURL: decoded.picture ?? normalizeString(body.photoURL),
-      provider: decoded.firebase.sign_in_provider ?? null,
-      lastLoginAt: now,
-      ...profile
-    };
-
     try {
-      const snapshot = await userRef.get();
-
-      if (!snapshot.exists) {
-        await userRef.set({ ...payload, createdAt: now }, { merge: true });
-      } else {
-        await userRef.set(payload, { merge: true });
-      }
+      const result = await ensureUserDocument(req.firebaseUser, req.body);
 
       res.status(200).json({
         status: true,
         message: "User synced successfully.",
         details: {
-          uid,
-          isNewUser: !snapshot.exists
+          uid: req.firebaseUser.uid,
+          isNewUser: result.isNewUser
         }
       });
     } catch (error) {
@@ -161,16 +97,15 @@ router.get(
     }
 
     try {
-      const snapshot = await db.collection("users").doc(req.firebaseUser.uid).get();
-
-      if (!snapshot.exists) {
-        throw new AppError(404, "USER_NOT_FOUND", "User record not found.");
-      }
+      const { snapshot, isNewUser } = await ensureUserDocument(req.firebaseUser);
 
       res.status(200).json({
         status: true,
         message: "User profile fetched successfully.",
-        details: snapshot.data()
+        details: {
+          ...snapshot.data(),
+          isNewUser
+        }
       });
     } catch (error) {
       if (error instanceof AppError) {
