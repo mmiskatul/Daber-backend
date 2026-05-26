@@ -7,6 +7,15 @@ type EnvConfig = {
   firebaseProjectId: string;
   firebaseClientEmail: string;
   firebasePrivateKey: string;
+  scenarioProviderDefault: "gemini" | "openai";
+  openAiApiKey: string;
+  openAiModel: string;
+  openAiTranscriptionModel: string;
+  geminiApiKey: string;
+  geminiModel: string;
+  geminiAudioModel: string;
+  jwtAccessSecret: string;
+  jwtRefreshSecret: string;
 };
 
 function getEnv(name: string): string {
@@ -19,6 +28,10 @@ function getEnv(name: string): string {
   return value;
 }
 
+function getOptionalEnv(name: string, fallback = ""): string {
+  return process.env[name] || fallback;
+}
+
 function normalizePrivateKey(value: string): string {
   return value.replace(/\\n/g, "\n");
 }
@@ -27,5 +40,14 @@ export const config: EnvConfig = {
   port: Number(process.env.PORT || 4000),
   firebaseProjectId: getEnv("FIREBASE_PROJECT_ID"),
   firebaseClientEmail: getEnv("FIREBASE_CLIENT_EMAIL"),
-  firebasePrivateKey: normalizePrivateKey(getEnv("FIREBASE_PRIVATE_KEY"))
+  firebasePrivateKey: normalizePrivateKey(getEnv("FIREBASE_PRIVATE_KEY")),
+  scenarioProviderDefault: process.env.SCENARIO_PROVIDER_DEFAULT === "openai" ? "openai" : "gemini",
+  openAiApiKey: getOptionalEnv("OPENAI_API_KEY"),
+  openAiModel: getOptionalEnv("OPENAI_SCENARIO_MODEL", "gpt-4.1-mini"),
+  openAiTranscriptionModel: getOptionalEnv("OPENAI_TRANSCRIPTION_MODEL", "gpt-4o-mini-transcribe"),
+  geminiApiKey: getOptionalEnv("GEMINI_API_KEY"),
+  geminiModel: getOptionalEnv("GEMINI_SCENARIO_MODEL", "gemini-2.0-flash"),
+  geminiAudioModel: getOptionalEnv("GEMINI_AUDIO_MODEL", "gemini-2.5-flash"),
+  jwtAccessSecret: getOptionalEnv("JWT_ACCESS_SECRET", "daber-access-secret-12345"),
+  jwtRefreshSecret: getOptionalEnv("JWT_REFRESH_SECRET", "daber-refresh-secret-12345")
 };

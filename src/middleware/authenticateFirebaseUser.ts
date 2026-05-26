@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
-import admin from "../firebaseAdmin";
 import { AppError } from "../errors";
+import { verifyJwt } from "../jwt";
+import { config } from "../config";
 
 export async function authenticateFirebaseUser(
   req: Request,
@@ -20,15 +21,19 @@ export async function authenticateFirebaseUser(
       throw new AppError(401, "EMPTY_BEARER_TOKEN", "Empty Bearer token.");
     }
 
-    req.firebaseUser = await admin.auth().verifyIdToken(token);
-    next();
-  } catch (error) {
-    if (error instanceof AppError) {
-      next(error);
-      return;
+    try {
+      const decoded = verifyJwt(token, config.jwtAccessSecret);
+      req.firebaseUser = decoded;
+      next();
+    } catch (jwtError) {
+      const msg = jwtError instanceof Error ? jwtError.message : "Token verification failed.";
+      if (msg === "Token expired.") {
+        throw new AppError(401, "ACCESS_TOKEN_EXPIRED", "Access token has expired.", msg);
+      } else {
+        throw new AppError(401, "INVALID_ACCESS_TOKEN", "Invalid backend access token.", msg);
+      }
     }
-
-    const message = error instanceof Error ? error.message : "Token verification failed.";
-    next(new AppError(401, "INVALID_FIREBASE_ID_TOKEN", "Invalid Firebase ID token.", message));
+  } catch (error) {
+    next(error);
   }
 }

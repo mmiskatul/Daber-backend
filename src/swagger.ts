@@ -110,6 +110,124 @@ const swaggerSpec = swaggerJsdoc({
               $ref: "#/components/schemas/OnboardingData"
             }
           }
+        },
+        ScenarioThemeData: {
+          type: "object",
+          properties: {
+            id: { type: "string", example: "supermarket" },
+            title: { type: "string", example: "Supermarket" },
+            he: { type: "string", example: "בַּסּוּפֶּר" },
+            heChar: { type: "string", example: "ס" },
+            band: { type: "string", example: "A2–B1" },
+            blurb: { type: "string" },
+            locked: { type: "boolean" }
+          }
+        },
+        ScenarioLaunchResponse: {
+          type: "object",
+          properties: {
+            status: { type: "boolean", example: true },
+            message: { type: "string" },
+            details: {
+              type: "object",
+              properties: {
+                sessionId: { type: "string" },
+                provider: { type: "string", example: "gemini" },
+                providerConfigured: { type: "boolean" },
+                theme: { $ref: "#/components/schemas/ScenarioThemeData" },
+                tutorVoice: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string", example: "dana" },
+                    name: { type: "string", example: "Dana" },
+                    subtitle: { type: "string", example: "Warm, patient, direct." }
+                  }
+                },
+                conversation: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string" },
+                    starterLine: { type: "string" },
+                    promptSeed: { type: "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        ScenarioTurnData: {
+          type: "object",
+          properties: {
+            role: { type: "string", example: "tutor" },
+            text: { type: "string" },
+            createdAt: { type: "string", example: "2026-05-26T12:00:00.000Z" },
+            inputMode: { type: "string", nullable: true, example: "voice" },
+            provider: { type: "string", nullable: true, example: "gemini" },
+            model: { type: "string", nullable: true, example: "gemini-2.0-flash" },
+            liveModelCall: { type: "boolean", nullable: true, example: false },
+            pronunciation: {
+              nullable: true,
+              $ref: "#/components/schemas/PronunciationData"
+            }
+          }
+        },
+        PronunciationData: {
+          type: "object",
+          properties: {
+            overallScore: { type: "integer", example: 82 },
+            accuracyScore: { type: "integer", example: 80 },
+            fluencyScore: { type: "integer", example: 85 },
+            feedback: { type: "string", example: "Stress the final word less and keep the vowel longer." },
+            scoringMode: { type: "string", example: "audio" }
+          }
+        },
+        ScenarioSessionResponse: {
+          type: "object",
+          properties: {
+            status: { type: "boolean", example: true },
+            message: { type: "string" },
+            details: {
+              type: "object"
+            }
+          }
+        },
+        ScenarioMessageResponse: {
+          type: "object",
+          properties: {
+            status: { type: "boolean", example: true },
+            message: { type: "string" },
+            details: {
+              type: "object",
+              properties: {
+                sessionId: { type: "string" },
+                provider: { type: "string", example: "gemini" },
+                providerConfigured: { type: "boolean" },
+                model: { type: "string", example: "gemini-2.0-flash" },
+                learnerTurn: { $ref: "#/components/schemas/ScenarioTurnData" },
+                tutorTurn: { $ref: "#/components/schemas/ScenarioTurnData" }
+              }
+            }
+          }
+        },
+        ScenarioVoiceResponse: {
+          type: "object",
+          properties: {
+            status: { type: "boolean", example: true },
+            message: { type: "string" },
+            details: {
+              type: "object",
+              properties: {
+                sessionId: { type: "string" },
+                provider: { type: "string", example: "gemini" },
+                providerConfigured: { type: "boolean" },
+                model: { type: "string", example: "gemini-2.5-flash" },
+                transcript: { type: "string", example: "Ani mevakesh beitzim bevakasha." },
+                pronunciation: { $ref: "#/components/schemas/PronunciationData" },
+                learnerTurn: { $ref: "#/components/schemas/ScenarioTurnData" },
+                tutorTurn: { $ref: "#/components/schemas/ScenarioTurnData" }
+              }
+            }
+          }
         }
       }
     }

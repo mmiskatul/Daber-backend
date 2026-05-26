@@ -6,24 +6,39 @@ This backend assumes the frontend already signs users in with Firebase Auth
 1. Verify the Firebase ID token sent by the frontend.
 2. Store or update the user in Firestore.
 
+It also supports scenario launch and message endpoints that can use Gemini or OpenAI.
+
 ## Endpoints
 
 - `GET /health`
 - `POST /auth/sync-user`
 - `GET /me`
+- `GET /scenarios/themes`
+- `POST /scenarios/launch`
+- `GET /scenarios/sessions/:sessionId`
+- `POST /scenarios/sessions/:sessionId/message`
 - `GET /docs`
 
 ## Setup
 
 1. Copy `.env.example` to `.env`.
 2. Fill in your Firebase Admin service account values.
-3. Install dependencies:
+3. Optionally fill in scenario provider credentials:
+
+```env
+SCENARIO_PROVIDER_DEFAULT=gemini
+OPENAI_API_KEY=
+OPENAI_SCENARIO_MODEL=gpt-4.1-mini
+GEMINI_API_KEY=
+GEMINI_SCENARIO_MODEL=gemini-2.0-flash
+```
+4. Install dependencies:
 
 ```bash
 npm install
 ```
 
-4. Start the server:
+5. Start the server:
 
 ```bash
 npm run dev

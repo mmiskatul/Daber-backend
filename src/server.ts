@@ -5,6 +5,7 @@ import { config } from "./config";
 import { errorHandler } from "./middleware/errorHandler";
 import authRoutes from "./routes/auth";
 import onboardingRoutes from "./routes/onboarding";
+import scenarioRoutes from "./routes/scenarios";
 import swaggerSpec from "./swagger";
 
 const app = express();
@@ -54,6 +55,7 @@ app.get("/health", (_req, res) => {
 
 app.use("/auth", authRoutes);
 app.use("/onboarding", onboardingRoutes);
+app.use("/scenarios", scenarioRoutes);
 app.use(errorHandler);
 
 app.listen(config.port, () => {
