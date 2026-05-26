@@ -19,6 +19,7 @@ import { generateScenarioTutorReply, generateScenarioVoiceReply } from "../scena
 type LaunchBody = {
   themeId?: string;
   provider?: "gemini" | "openai";
+  forceNew?: boolean;
 };
 
 type ScenarioMessageBody = {
@@ -103,6 +104,21 @@ async function getOwnedSession(userUid: string, sessionId: string) {
   }
 
   return { sessionRef, snapshot };
+}
+
+async function findReusableThemeSession(userUid: string, themeId: string, provider: "gemini" | "openai") {
+  const snapshots = await db.collection("users").doc(userUid).collection("scenarioSessions").get();
+
+  const reusable = snapshots.docs
+    .map((doc) => ({ id: doc.id, data: doc.data() }))
+    .filter((entry) => entry.data?.theme?.id === themeId && entry.data?.provider === provider)
+    .sort((left, right) => {
+      const leftMillis = left.data?.updatedAt?.toMillis?.() ?? left.data?.createdAt?.toMillis?.() ?? 0;
+      const rightMillis = right.data?.updatedAt?.toMillis?.() ?? right.data?.createdAt?.toMillis?.() ?? 0;
+      return rightMillis - leftMillis;
+    })[0];
+
+  return reusable || null;
 }
 
 /**
@@ -191,6 +207,7 @@ router.post(
     const body = (req.body ?? {}) as LaunchBody;
     const themeId = typeof body.themeId === "string" ? body.themeId.trim() : "";
     const provider = body.provider === "openai" ? "openai" : body.provider === "gemini" ? "gemini" : config.scenarioProviderDefault;
+    const forceNew = body.forceNew === true;
 
     if (!themeId) {
       throw new AppError(400, "MISSING_THEME_ID", "Scenario launch requires a themeId.");
@@ -210,6 +227,24 @@ router.post(
     const userData = snapshot.data() || {};
     const onboarding = (userData.onboarding || {}) as { voice?: string; native?: string; level?: string; goal?: string };
     const tutorVoice = TUTOR_VOICES[getTutorVoiceId(onboarding.voice)];
+
+    const reusableSession = forceNew ? null : await findReusableThemeSession(req.firebaseUser.uid, theme.id, provider);
+
+    if (reusableSession) {
+      await userRef.collection("scenarioSessions").doc(reusableSession.id).set(
+        {
+          updatedAt: FieldValue.serverTimestamp()
+        },
+        { merge: true }
+      );
+
+      res.status(200).json({
+        status: true,
+        message: "Scenario session reused successfully.",
+        details: reusableSession.data
+      });
+      return;
+    }
 
     const ct = pickRandom(theme.cts);
     const variation = pickRandom(ct.variations);
