@@ -1,6 +1,5 @@
 import { Router } from "express";
 import { FieldValue } from "firebase-admin/firestore";
-import admin from "../firebaseAdmin";
 import { AppError } from "../errors";
 import { asyncHandler } from "../middleware/asyncHandler";
 import { authenticateFirebaseUser } from "../middleware/authenticateFirebaseUser";
@@ -26,7 +25,6 @@ const ALLOWED_GOAL = new Set(["travel", "family", "work", "culture"]);
 const ALLOWED_VOICE = new Set(["dana", "noam", "shira"]);
 
 const router = Router();
-const db = admin.firestore();
 
 function ensureAllowed(value: string | null, allowed: Set<string>, field: string): string {
   if (!value || !allowed.has(value)) {

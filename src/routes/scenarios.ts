@@ -14,7 +14,12 @@ import {
   TUTOR_VOICES,
   TutorVoiceId
 } from "../scenarioCatalog";
-import { generateScenarioTutorReply, generateScenarioVoiceReply } from "../scenarioProviders";
+import {
+  generateScenarioTutorReply,
+  generateScenarioVoiceReply,
+  generateScenarioVoiceReplyFromTranscript,
+  transcribeScenarioVoice
+} from "../scenarioProviders";
 
 type LaunchBody = {
   themeId?: string;
@@ -30,6 +35,11 @@ type ScenarioVoiceBody = {
   audioBase64?: string;
   mimeType?: string;
   fileName?: string;
+  referenceText?: string;
+};
+
+type ScenarioVoiceRespondBody = {
+  transcript?: string;
   referenceText?: string;
 };
 
@@ -85,6 +95,41 @@ function buildMockTutorReply(input: {
   }
 
   return `${input.tutorName}: I heard "${trimmed}". Let's keep building the conversation naturally.`;
+}
+
+function buildMockTutorReplyPayload(input: {
+  tutorName: string;
+  themeId: string;
+  learnerMessage: string;
+  provider: "gemini" | "openai";
+}): { text: string; translation: string | null } {
+  const trimmed = input.learnerMessage.trim();
+
+  if (input.themeId === "supermarket") {
+    return {
+      text: "בסדר. עכשיו תשאל איפה המוצר נמצא או כמה הוא עולה.",
+      translation: `Okay. Now ask where the item is or how much it costs. You said: "${trimmed}".`
+    };
+  }
+
+  if (input.themeId === "shuk") {
+    return {
+      text: "יופי. בשוק עדיף לדבר קצר וברור. עכשיו תשאל על המחיר או על הכמות.",
+      translation: `Good. In the Friday market, keep it short and direct. You said: "${trimmed}".`
+    };
+  }
+
+  if (input.themeId === "cafe") {
+    return {
+      text: "מעולה. עכשיו תוכל לשאול על הגודל או אם זה לקחת או לשבת.",
+      translation: `Great. In the cafe, a useful follow-up is drink size or stay versus take away. You said: "${trimmed}".`
+    };
+  }
+
+  return {
+    text: "שמעתי אותך. בוא נמשיך את השיחה בצורה טבעית.",
+    translation: `I heard you. Let's keep building the conversation naturally. You said: "${trimmed}".`
+  };
 }
 
 function getRequiredParam(value: string | string[] | undefined, name: string): string {
@@ -408,6 +453,7 @@ router.post(
     };
 
     let tutorReply = "";
+    let tutorTranslation: string | null = null;
     let liveModelCall = false;
 
     try {
@@ -427,20 +473,24 @@ router.post(
       });
 
       tutorReply = providerResult.text;
+      tutorTranslation = providerResult.translation || null;
       liveModelCall = providerResult.liveModelCall;
     } catch {
-      tutorReply = buildMockTutorReply({
+      const fallbackReply = buildMockTutorReplyPayload({
         tutorName: tutorVoice.name || "Dana",
         themeId: theme.id || "supermarket",
         learnerMessage: message,
         provider
       });
+      tutorReply = fallbackReply.text;
+      tutorTranslation = fallbackReply.translation;
       liveModelCall = false;
     }
 
     const tutorTurn = {
       role: "tutor",
       text: tutorReply,
+      translation: tutorTranslation,
       createdAt: new Date().toISOString(),
       provider,
       model,
@@ -516,6 +566,182 @@ router.post(
  *         description: Scenario session not found
  */
 router.post(
+  "/sessions/:sessionId/voice/transcribe",
+  authenticateFirebaseUser,
+  asyncHandler(async (req, res) => {
+    if (!req.firebaseUser) {
+      throw new AppError(401, "UNAUTHENTICATED", "Authenticated user was not attached to the request.");
+    }
+
+    await ensureUserDocument(req.firebaseUser);
+    const sessionId = getRequiredParam(req.params.sessionId, "sessionId");
+    const body = (req.body ?? {}) as ScenarioVoiceBody;
+    const audioBase64 = typeof body.audioBase64 === "string" ? body.audioBase64.trim() : "";
+    const mimeType = typeof body.mimeType === "string" && body.mimeType.trim() ? body.mimeType.trim() : "audio/mp4";
+    const fileName = typeof body.fileName === "string" && body.fileName.trim() ? body.fileName.trim() : "learner-audio.m4a";
+    const referenceText = typeof body.referenceText === "string" ? body.referenceText.trim() : "";
+
+    if (!audioBase64) {
+      throw new AppError(400, "MISSING_SCENARIO_AUDIO", "Scenario voice request requires a non-empty audioBase64 field.");
+    }
+
+    const { snapshot } = await getOwnedSession(req.firebaseUser.uid, sessionId);
+    const session = snapshot.data() || {};
+    const provider = session.provider === "openai" ? "openai" : "gemini";
+    const tutorVoice = session.tutorVoice || { name: "Dana", subtitle: "Warm, patient, direct." };
+    const theme = session.theme || { id: "supermarket", title: "Scenario" };
+
+    const transcriptResult = await transcribeScenarioVoice({
+      provider,
+      tutorName: tutorVoice.name || "Dana",
+      tutorSubtitle: tutorVoice.subtitle || "",
+      themeTitle: theme.title || "Scenario",
+      themeId: theme.id || "supermarket",
+      situation: session.variation?.situation || "",
+      level: session.learnerProfile?.level || null,
+      goal: session.learnerProfile?.goal || null,
+      native: session.learnerProfile?.native || null,
+      starterLine: session.conversation?.starterLine || "",
+      priorTurns: Array.isArray(session.turns) ? session.turns : [],
+      learnerMessage: "",
+      audioBase64,
+      mimeType,
+      fileName,
+      referenceText
+    });
+
+    res.status(200).json({
+      status: true,
+      message: "Scenario voice transcribed successfully.",
+      details: {
+        sessionId,
+        transcript: transcriptResult.transcript,
+        learnerTurn: {
+          role: "learner",
+          text: transcriptResult.transcript,
+          createdAt: new Date().toISOString(),
+          inputMode: "voice"
+        }
+      }
+    });
+  })
+);
+
+router.post(
+  "/sessions/:sessionId/voice/respond",
+  authenticateFirebaseUser,
+  asyncHandler(async (req, res) => {
+    if (!req.firebaseUser) {
+      throw new AppError(401, "UNAUTHENTICATED", "Authenticated user was not attached to the request.");
+    }
+
+    await ensureUserDocument(req.firebaseUser);
+    const sessionId = getRequiredParam(req.params.sessionId, "sessionId");
+    const body = (req.body ?? {}) as ScenarioVoiceRespondBody;
+    const transcript = typeof body.transcript === "string" ? body.transcript.trim() : "";
+    const referenceText = typeof body.referenceText === "string" ? body.referenceText.trim() : "";
+
+    if (!transcript) {
+      throw new AppError(400, "MISSING_SCENARIO_TRANSCRIPT", "Scenario voice response requires a non-empty transcript field.");
+    }
+
+    const { sessionRef, snapshot } = await getOwnedSession(req.firebaseUser.uid, sessionId);
+    const session = snapshot.data() || {};
+    const provider = session.provider === "openai" ? "openai" : "gemini";
+    const tutorVoice = session.tutorVoice || { name: "Dana", subtitle: "Warm, patient, direct." };
+    const theme = session.theme || { id: "supermarket", title: "Scenario" };
+    const model = provider === "openai" ? config.openAiTranscriptionModel : config.geminiAudioModel;
+    const providerConfigured = provider === "openai" ? Boolean(config.openAiApiKey) : Boolean(config.geminiApiKey);
+
+    let pronunciation;
+    let tutorReply;
+
+    try {
+      const result = await generateScenarioVoiceReplyFromTranscript({
+        provider,
+        tutorName: tutorVoice.name || "Dana",
+        tutorSubtitle: tutorVoice.subtitle || "",
+        themeTitle: theme.title || "Scenario",
+        themeId: theme.id || "supermarket",
+        situation: session.variation?.situation || "",
+        level: session.learnerProfile?.level || null,
+        goal: session.learnerProfile?.goal || null,
+        native: session.learnerProfile?.native || null,
+        starterLine: session.conversation?.starterLine || "",
+        priorTurns: Array.isArray(session.turns) ? session.turns : [],
+        referenceText,
+        transcript
+      });
+      pronunciation = result.pronunciation;
+      tutorReply = result.tutorReply;
+    } catch {
+      pronunciation = {
+        overallScore: 75,
+        accuracyScore: 74,
+        fluencyScore: 77,
+        feedback: "Keep the phrase shorter and repeat the target sound more clearly.",
+        scoringMode: "transcript" as const
+      };
+      tutorReply = {
+        ...buildMockTutorReplyPayload({
+          tutorName: tutorVoice.name || "Dana",
+          themeId: theme.id || "supermarket",
+          learnerMessage: transcript,
+          provider
+        }),
+        provider,
+        model,
+        liveModelCall: false
+      };
+    }
+
+    const learnerTurn = {
+      role: "learner",
+      text: transcript,
+      createdAt: new Date().toISOString(),
+      inputMode: "voice",
+      pronunciation
+    };
+
+    const tutorTurn = {
+      role: "tutor",
+      text: tutorReply.text,
+      translation: tutorReply.translation || null,
+      createdAt: new Date().toISOString(),
+      provider,
+      model: tutorReply.model || model,
+      liveModelCall: tutorReply.liveModelCall
+    };
+
+    await sessionRef.set(
+      {
+        turns: FieldValue.arrayUnion(learnerTurn, tutorTurn),
+        updatedAt: FieldValue.serverTimestamp(),
+        lastLearnerMessage: transcript,
+        lastTutorReply: tutorReply.text,
+        lastPronunciation: pronunciation
+      },
+      { merge: true }
+    );
+
+    res.status(200).json({
+      status: true,
+      message: "Scenario voice response generated successfully.",
+      details: {
+        sessionId,
+        provider,
+        providerConfigured,
+        model: tutorTurn.model,
+        transcript,
+        pronunciation,
+        learnerTurn,
+        tutorTurn
+      }
+    });
+  })
+);
+
+router.post(
   "/sessions/:sessionId/voice",
   authenticateFirebaseUser,
   asyncHandler(async (req, res) => {
@@ -573,6 +799,7 @@ router.post(
     const tutorTurn = {
       role: "tutor",
       text: voiceResult.tutorReply.text,
+      translation: voiceResult.tutorReply.translation || null,
       createdAt: new Date().toISOString(),
       provider,
       model: voiceResult.tutorReply.model,
