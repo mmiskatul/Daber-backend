@@ -91,21 +91,19 @@ function buildMockTutorReply(input: {
   learnerMessage: string;
   provider: "gemini" | "openai";
 }): string {
-  const trimmed = input.learnerMessage.trim();
-
   if (input.themeId === "supermarket") {
-    return `${input.tutorName}: Got it. In the supermarket, a natural next step is to ask where the item is or how much it costs. You said: "${trimmed}".`;
+    return `${input.tutorName}: Got it. In the supermarket, a natural next step is to ask where the item is or how much it costs.`;
   }
 
   if (input.themeId === "shuk") {
-    return `${input.tutorName}: In the Friday market, keep it short and direct. You can ask about price, freshness, or quantity. You said: "${trimmed}".`;
+    return `${input.tutorName}: In the Friday market, keep it short and direct. You can ask about price, freshness, or quantity.`;
   }
 
   if (input.themeId === "cafe") {
-    return `${input.tutorName}: In the café, that works. A useful follow-up is your drink size or whether you want it to stay or go. You said: "${trimmed}".`;
+    return `${input.tutorName}: In the café, that works. A useful follow-up is your drink size or whether you want it to stay or go.`;
   }
 
-  return `${input.tutorName}: I heard "${trimmed}". Let's keep building the conversation naturally.`;
+  return `${input.tutorName}: Let's keep building the conversation naturally.`;
 }
 
 function buildMockTutorReplyPayload(input: {
@@ -114,32 +112,30 @@ function buildMockTutorReplyPayload(input: {
   learnerMessage: string;
   provider: "gemini" | "openai";
 }): { text: string; translation: string | null } {
-  const trimmed = input.learnerMessage.trim();
-
   if (input.themeId === "supermarket") {
     return {
       text: "בסדר. עכשיו תשאל איפה המוצר נמצא או כמה הוא עולה.",
-      translation: `Okay. Now ask where the item is or how much it costs. You said: "${trimmed}".`
+      translation: "Okay. Now ask where the item is or how much it costs."
     };
   }
 
   if (input.themeId === "shuk") {
     return {
       text: "יופי. בשוק עדיף לדבר קצר וברור. עכשיו תשאל על המחיר או על הכמות.",
-      translation: `Good. In the Friday market, keep it short and direct. You said: "${trimmed}".`
+      translation: "Good. In the Friday market, keep it short and direct. Now ask about the price or quantity."
     };
   }
 
   if (input.themeId === "cafe") {
     return {
       text: "מעולה. עכשיו תוכל לשאול על הגודל או אם זה לקחת או לשבת.",
-      translation: `Great. In the cafe, a useful follow-up is drink size or stay versus take away. You said: "${trimmed}".`
+      translation: "Great. Now you can ask about the size or whether it is to stay or take away."
     };
   }
 
   return {
     text: "שמעתי אותך. בוא נמשיך את השיחה בצורה טבעית.",
-    translation: `I heard you. Let's keep building the conversation naturally. You said: "${trimmed}".`
+    translation: "I heard you. Let's keep building the conversation naturally."
   };
 }
 

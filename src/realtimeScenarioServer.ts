@@ -43,31 +43,31 @@ async function getOwnedSession(uid: string, sessionId: string) {
   return { sessionRef, session: snapshot.data() || {} };
 }
 
-function buildFallbackTutor(themeId: string, learnerMessage: string) {
+function buildFallbackTutor(themeId: string, _learnerMessage: string) {
   if (themeId === "supermarket") {
     return {
       text: "בסדר. עכשיו תשאל איפה המוצר נמצא או כמה הוא עולה.",
-      translation: `Okay. Now ask where the item is or how much it costs. You said: "${learnerMessage}".`
+      translation: "Okay. Now ask where the item is or how much it costs."
     };
   }
 
   if (themeId === "shuk") {
     return {
       text: "יופי. עכשיו תשאל על המחיר או על הכמות.",
-      translation: `Good. Now ask about the price or quantity. You said: "${learnerMessage}".`
+      translation: "Good. Now ask about the price or quantity."
     };
   }
 
   if (themeId === "cafe") {
     return {
       text: "מעולה. עכשיו תוכל לשאול על הגודל או אם זה לקחת.",
-      translation: `Great. Now ask about the size or whether it is to go. You said: "${learnerMessage}".`
+      translation: "Great. Now ask about the size or whether it is to go."
     };
   }
 
   return {
     text: "שמעתי אותך. בוא נמשיך את השיחה.",
-    translation: `I heard you. Let's continue the conversation. You said: "${learnerMessage}".`
+    translation: "I heard you. Let's continue the conversation."
   };
 }
 
