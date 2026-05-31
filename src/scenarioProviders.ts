@@ -247,7 +247,8 @@ async function callOpenAiText(prompt: string): Promise<string> {
     },
     body: JSON.stringify({
       model: config.openAiModel,
-      input: prompt
+      input: prompt,
+      temperature: 0
     })
   });
 
@@ -296,7 +297,8 @@ async function callGeminiText(prompt: string): Promise<string> {
           role: "user",
           parts: [{ text: prompt }]
         }
-      ]
+      ],
+      generationConfig: { temperature: 0 }
     })
   });
 
@@ -446,7 +448,8 @@ async function analyzeVoiceTurnWithGemini(context: ScenarioVoiceContext): Promis
             }
           ]
         }
-      ]
+      ],
+      generationConfig: { temperature: 0 }
     })
   });
 
@@ -532,7 +535,8 @@ async function transcribeWithGemini(context: ScenarioVoiceContext): Promise<stri
             }
           ]
         }
-      ]
+      ],
+      generationConfig: { temperature: 0 }
     })
   });
 

@@ -132,7 +132,7 @@ const swaggerSpec = swaggerJsdoc({
               type: "object",
               properties: {
                 sessionId: { type: "string" },
-                provider: { type: "string", example: "gemini" },
+                provider: { type: "string", example: "openai" },
                 providerConfigured: { type: "boolean" },
                 theme: { $ref: "#/components/schemas/ScenarioThemeData" },
                 tutorVoice: {
@@ -162,8 +162,8 @@ const swaggerSpec = swaggerJsdoc({
             text: { type: "string" },
             createdAt: { type: "string", example: "2026-05-26T12:00:00.000Z" },
             inputMode: { type: "string", nullable: true, example: "voice" },
-            provider: { type: "string", nullable: true, example: "gemini" },
-            model: { type: "string", nullable: true, example: "gemini-2.0-flash" },
+            provider: { type: "string", nullable: true, example: "openai" },
+            model: { type: "string", nullable: true, example: "gpt-4.1-mini" },
             liveModelCall: { type: "boolean", nullable: true, example: false },
             pronunciation: {
               nullable: true,
@@ -200,9 +200,9 @@ const swaggerSpec = swaggerJsdoc({
               type: "object",
               properties: {
                 sessionId: { type: "string" },
-                provider: { type: "string", example: "gemini" },
+                provider: { type: "string", example: "openai" },
                 providerConfigured: { type: "boolean" },
-                model: { type: "string", example: "gemini-2.0-flash" },
+                model: { type: "string", example: "gpt-4.1-mini" },
                 learnerTurn: { $ref: "#/components/schemas/ScenarioTurnData" },
                 tutorTurn: { $ref: "#/components/schemas/ScenarioTurnData" }
               }
@@ -218,9 +218,9 @@ const swaggerSpec = swaggerJsdoc({
               type: "object",
               properties: {
                 sessionId: { type: "string" },
-                provider: { type: "string", example: "gemini" },
+                provider: { type: "string", example: "openai" },
                 providerConfigured: { type: "boolean" },
-                model: { type: "string", example: "gemini-2.5-flash" },
+                model: { type: "string", example: "gpt-4o-mini-transcribe" },
                 transcript: { type: "string", example: "Ani mevakesh beitzim bevakasha." },
                 pronunciation: { $ref: "#/components/schemas/PronunciationData" },
                 learnerTurn: { $ref: "#/components/schemas/ScenarioTurnData" },

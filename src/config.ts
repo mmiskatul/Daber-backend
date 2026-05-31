@@ -43,7 +43,7 @@ export const config: EnvConfig = {
   firebaseProjectId: getEnv("FIREBASE_PROJECT_ID"),
   firebaseClientEmail: getEnv("FIREBASE_CLIENT_EMAIL"),
   firebasePrivateKey: normalizePrivateKey(getEnv("FIREBASE_PRIVATE_KEY")),
-  scenarioProviderDefault: process.env.SCENARIO_PROVIDER_DEFAULT === "openai" ? "openai" : "gemini",
+  scenarioProviderDefault: process.env.SCENARIO_PROVIDER_DEFAULT === "gemini" ? "gemini" : "openai",
   openAiApiKey: getOptionalEnv("OPENAI_API_KEY"),
   openAiModel: getOptionalEnv("OPENAI_SCENARIO_MODEL", "gpt-4.1-mini"),
   openAiTranscriptionModel: getOptionalEnv("OPENAI_TRANSCRIPTION_MODEL", "gpt-4o-mini-transcribe"),

@@ -85,60 +85,6 @@ function buildStarterLine(themeId: string, tutorName: string): string {
   return `${tutorName}: Let's begin. Tell me what you need.`;
 }
 
-function buildMockTutorReply(input: {
-  tutorName: string;
-  themeId: string;
-  learnerMessage: string;
-  provider: "gemini" | "openai";
-}): string {
-  if (input.themeId === "supermarket") {
-    return `${input.tutorName}: Got it. In the supermarket, a natural next step is to ask where the item is or how much it costs.`;
-  }
-
-  if (input.themeId === "shuk") {
-    return `${input.tutorName}: In the Friday market, keep it short and direct. You can ask about price, freshness, or quantity.`;
-  }
-
-  if (input.themeId === "cafe") {
-    return `${input.tutorName}: In the café, that works. A useful follow-up is your drink size or whether you want it to stay or go.`;
-  }
-
-  return `${input.tutorName}: Let's keep building the conversation naturally.`;
-}
-
-function buildMockTutorReplyPayload(input: {
-  tutorName: string;
-  themeId: string;
-  learnerMessage: string;
-  provider: "gemini" | "openai";
-}): { text: string; translation: string | null } {
-  if (input.themeId === "supermarket") {
-    return {
-      text: "בסדר. עכשיו תשאל איפה המוצר נמצא או כמה הוא עולה.",
-      translation: "Okay. Now ask where the item is or how much it costs."
-    };
-  }
-
-  if (input.themeId === "shuk") {
-    return {
-      text: "יופי. בשוק עדיף לדבר קצר וברור. עכשיו תשאל על המחיר או על הכמות.",
-      translation: "Good. In the Friday market, keep it short and direct. Now ask about the price or quantity."
-    };
-  }
-
-  if (input.themeId === "cafe") {
-    return {
-      text: "מעולה. עכשיו תוכל לשאול על הגודל או אם זה לקחת או לשבת.",
-      translation: "Great. Now you can ask about the size or whether it is to stay or take away."
-    };
-  }
-
-  return {
-    text: "שמעתי אותך. בוא נמשיך את השיחה בצורה טבעית.",
-    translation: "I heard you. Let's keep building the conversation naturally."
-  };
-}
-
 function getRequiredParam(value: string | string[] | undefined, name: string): string {
   if (typeof value === "string" && value.trim()) {
     return value.trim();
@@ -277,7 +223,7 @@ router.post(
 
     const body = (req.body ?? {}) as LaunchBody;
     const themeId = typeof body.themeId === "string" ? body.themeId.trim() : "";
-    const provider = body.provider === "openai" ? "openai" : body.provider === "gemini" ? "gemini" : config.scenarioProviderDefault;
+    const provider = body.provider === "openai" ? "openai" : config.scenarioProviderDefault;
     const forceNew = body.forceNew === true;
 
     if (!themeId) {
@@ -499,7 +445,7 @@ router.post(
 
     const { sessionRef, snapshot } = await getOwnedSession(req.firebaseUser.uid, sessionId);
     const session = snapshot.data() || {};
-    const provider = session.provider === "openai" ? "openai" : "gemini";
+    const provider = session.provider === "openai" ? "openai" : config.scenarioProviderDefault;
     const native = (typeof body.native === "string" && body.native.trim()) || getCurrentNativeLanguage(userSnapshot.data(), session) || "English";
     const translationKey = getSupportTranslationKey(text);
     const storedTranslation = session.supportTranslations?.[native]?.[translationKey];
@@ -577,7 +523,7 @@ router.post(
     const { sessionRef, snapshot } = await getOwnedSession(req.firebaseUser.uid, sessionId);
     const session = snapshot.data() || {};
     const native = getCurrentNativeLanguage(userSnapshot.data(), session);
-    const provider = session.provider === "openai" ? "openai" : "gemini";
+    const provider = session.provider === "openai" ? "openai" : config.scenarioProviderDefault;
     const tutorVoice = session.tutorVoice || { name: "Dana" };
     const theme = session.theme || { id: "supermarket" };
     const model = provider === "openai" ? config.openAiModel : config.geminiModel;
@@ -612,16 +558,27 @@ router.post(
       tutorReply = providerResult.text;
       tutorTranslation = providerResult.translation || null;
       liveModelCall = providerResult.liveModelCall;
-    } catch {
-      const fallbackReply = buildMockTutorReplyPayload({
-        tutorName: tutorVoice.name || "Dana",
-        themeId: theme.id || "supermarket",
-        learnerMessage: message,
-        provider
-      });
-      tutorReply = fallbackReply.text;
-      tutorTranslation = fallbackReply.translation;
-      liveModelCall = false;
+    } catch (providerError) {
+      console.error("[scenario:message] AI provider call failed:", providerError instanceof Error ? providerError.message : providerError);
+
+      if (providerConfigured) {
+        // AI is configured but failed — surface the real error to the client
+        throw new AppError(
+          502,
+          "SCENARIO_AI_CALL_FAILED",
+          `AI tutor call failed: ${providerError instanceof Error ? providerError.message : "Unknown provider error."}`,
+          { provider, model }
+        );
+      }
+
+      throw providerError instanceof AppError
+        ? providerError
+        : new AppError(
+            502,
+            "SCENARIO_AI_CALL_FAILED",
+            `AI tutor call failed: ${providerError instanceof Error ? providerError.message : "Unknown provider error."}`,
+            { provider, model }
+          );
     }
 
     const tutorTurn = {
@@ -725,7 +682,7 @@ router.post(
     const { snapshot } = await getOwnedSession(req.firebaseUser.uid, sessionId);
     const session = snapshot.data() || {};
     const native = getCurrentNativeLanguage(userSnapshot.data(), session);
-    const provider = session.provider === "openai" ? "openai" : "gemini";
+    const provider = session.provider === "openai" ? "openai" : config.scenarioProviderDefault;
     const tutorVoice = session.tutorVoice || { name: "Dana", subtitle: "Warm, patient, direct." };
     const theme = session.theme || { id: "supermarket", title: "Scenario" };
 
@@ -790,7 +747,7 @@ router.post(
     const { sessionRef, snapshot } = await getOwnedSession(req.firebaseUser.uid, sessionId);
     const session = snapshot.data() || {};
     const native = getCurrentNativeLanguage(userSnapshot.data(), session);
-    const provider = session.provider === "openai" ? "openai" : "gemini";
+    const provider = session.provider === "openai" ? "openai" : config.scenarioProviderDefault;
     const tutorVoice = session.tutorVoice || { name: "Dana", subtitle: "Warm, patient, direct." };
     const theme = session.theme || { id: "supermarket", title: "Scenario" };
     const model = provider === "openai" ? config.openAiTranscriptionModel : config.geminiAudioModel;
@@ -817,7 +774,18 @@ router.post(
       });
       pronunciation = result.pronunciation;
       tutorReply = result.tutorReply;
-    } catch {
+    } catch (providerError) {
+      console.error("[scenario:voice/respond] AI provider call failed:", providerError instanceof Error ? providerError.message : providerError);
+
+      throw providerError instanceof AppError
+        ? providerError
+        : new AppError(
+            502,
+            "SCENARIO_AI_CALL_FAILED",
+            `AI voice response failed: ${providerError instanceof Error ? providerError.message : "Unknown provider error."}`,
+            { provider, model }
+          );
+
       pronunciation = {
         overallScore: 75,
         accuracyScore: 74,
@@ -835,17 +803,6 @@ router.post(
             hint: "Keep the tzadi as one crisp ts sound."
           }
         ]
-      };
-      tutorReply = {
-        ...buildMockTutorReplyPayload({
-          tutorName: tutorVoice.name || "Dana",
-          themeId: theme.id || "supermarket",
-          learnerMessage: transcript,
-          provider
-        }),
-        provider,
-        model,
-        liveModelCall: false
       };
     }
 
@@ -918,7 +875,7 @@ router.post(
     const { sessionRef, snapshot } = await getOwnedSession(req.firebaseUser.uid, sessionId);
     const session = snapshot.data() || {};
     const native = getCurrentNativeLanguage(userSnapshot.data(), session);
-    const provider = session.provider === "openai" ? "openai" : "gemini";
+    const provider = session.provider === "openai" ? "openai" : config.scenarioProviderDefault;
     const tutorVoice = session.tutorVoice || { name: "Dana", subtitle: "Warm, patient, direct." };
     const theme = session.theme || { id: "supermarket", title: "Scenario" };
     const model = provider === "openai" ? config.openAiTranscriptionModel : config.geminiAudioModel;
@@ -1139,3 +1096,6 @@ router.post(
 );
 
 export default router;
+
+
+

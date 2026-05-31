@@ -43,34 +43,6 @@ async function getOwnedSession(uid: string, sessionId: string) {
   return { sessionRef, session: snapshot.data() || {} };
 }
 
-function buildFallbackTutor(themeId: string, _learnerMessage: string) {
-  if (themeId === "supermarket") {
-    return {
-      text: "בסדר. עכשיו תשאל איפה המוצר נמצא או כמה הוא עולה.",
-      translation: "Okay. Now ask where the item is or how much it costs."
-    };
-  }
-
-  if (themeId === "shuk") {
-    return {
-      text: "יופי. עכשיו תשאל על המחיר או על הכמות.",
-      translation: "Good. Now ask about the price or quantity."
-    };
-  }
-
-  if (themeId === "cafe") {
-    return {
-      text: "מעולה. עכשיו תוכל לשאול על הגודל או אם זה לקחת.",
-      translation: "Great. Now ask about the size or whether it is to go."
-    };
-  }
-
-  return {
-    text: "שמעתי אותך. בוא נמשיך את השיחה.",
-    translation: "I heard you. Let's continue the conversation."
-  };
-}
-
 function sessionRoom(uid: string, sessionId: string) {
   return `scenario:${uid}:${sessionId}`;
 }
@@ -136,7 +108,7 @@ export function attachRealtimeScenarioServer(httpServer: HttpServer) {
           }
 
           const { sessionRef, session } = await getOwnedSession(uid, sessionId);
-          const provider = session.provider === "openai" ? "openai" : "gemini";
+          const provider = session.provider === "openai" ? "openai" : config.scenarioProviderDefault;
           const tutorVoice = session.tutorVoice || { name: "Dana", subtitle: "Warm, patient, direct." };
           const theme = session.theme || { id: "supermarket", title: "Scenario" };
           const model = provider === "openai" ? config.openAiModel : config.geminiModel;
@@ -171,13 +143,11 @@ export function attachRealtimeScenarioServer(httpServer: HttpServer) {
               priorTurns: Array.isArray(session.turns) ? session.turns : [],
               learnerMessage: message
             });
-          } catch {
-            tutorReply = {
-              ...buildFallbackTutor(theme.id || "supermarket", message),
-              provider,
-              model,
-              liveModelCall: false
-            };
+          } catch (providerError) {
+            console.error("[realtime:text_turn] AI provider call failed:", providerError instanceof Error ? providerError.message : providerError);
+
+            throw providerError instanceof Error ? providerError : new Error("Failed to process text turn.");
+
           }
 
           const tutorTurn = {
@@ -238,7 +208,7 @@ export function attachRealtimeScenarioServer(httpServer: HttpServer) {
           }
 
           const { sessionRef, session } = await getOwnedSession(uid, sessionId);
-          const provider = session.provider === "openai" ? "openai" : "gemini";
+          const provider = session.provider === "openai" ? "openai" : config.scenarioProviderDefault;
           const tutorVoice = session.tutorVoice || { name: "Dana", subtitle: "Warm, patient, direct." };
           const theme = session.theme || { id: "supermarket", title: "Scenario" };
           const model = provider === "openai" ? config.openAiTranscriptionModel : config.geminiAudioModel;
@@ -297,19 +267,17 @@ export function attachRealtimeScenarioServer(httpServer: HttpServer) {
             });
             pronunciation = result.pronunciation;
             tutorReply = result.tutorReply;
-          } catch {
+          } catch (providerError) {
+            console.error("[realtime:voice_turn] AI provider call failed:", providerError instanceof Error ? providerError.message : providerError);
+
+            throw providerError instanceof Error ? providerError : new Error("Failed to process voice turn.");
+
             pronunciation = {
               overallScore: 75,
               accuracyScore: 74,
               fluencyScore: 77,
               feedback: "Keep the target sound tighter and repeat the phrase more clearly.",
               scoringMode: "transcript" as const
-            };
-            tutorReply = {
-              ...buildFallbackTutor(theme.id || "supermarket", transcriptResult.transcript),
-              provider,
-              model,
-              liveModelCall: false
             };
           }
 
@@ -354,3 +322,7 @@ export function attachRealtimeScenarioServer(httpServer: HttpServer) {
 
   return io;
 }
+
+
+
+

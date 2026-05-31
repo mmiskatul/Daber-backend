@@ -26,11 +26,11 @@ It also supports scenario launch and message endpoints that can use Gemini or Op
 3. Optionally fill in scenario provider credentials:
 
 ```env
-SCENARIO_PROVIDER_DEFAULT=gemini
+SCENARIO_PROVIDER_DEFAULT=openai
 OPENAI_API_KEY=
 OPENAI_SCENARIO_MODEL=gpt-4.1-mini
-GEMINI_API_KEY=
-GEMINI_SCENARIO_MODEL=gemini-2.0-flash
+OPENAI_TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
+OPENAI_TTS_MODEL=gpt-4o-mini-tts
 ```
 4. Install dependencies:
 
