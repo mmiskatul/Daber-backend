@@ -1,4 +1,5 @@
 import swaggerJsdoc from "swagger-jsdoc";
+import path from "path";
 
 const swaggerSpec = swaggerJsdoc({
   definition: {
@@ -9,6 +10,10 @@ const swaggerSpec = swaggerJsdoc({
       description: "Firebase-authenticated backend for storing Daber user records."
     },
     servers: [
+      {
+        url: "/",
+        description: "Current hosting server (default)"
+      },
       {
         url: "http://localhost:4000",
         description: "Local development server"
@@ -232,7 +237,12 @@ const swaggerSpec = swaggerJsdoc({
       }
     }
   },
-  apis: ["./src/server.ts", "./src/routes/*.ts"]
+  apis: [
+    path.join(__dirname, "app.ts").replace(/\\/g, "/"),
+    path.join(__dirname, "app.js").replace(/\\/g, "/"),
+    path.join(__dirname, "routes", "*.ts").replace(/\\/g, "/"),
+    path.join(__dirname, "routes", "*.js").replace(/\\/g, "/")
+  ]
 });
 
 export default swaggerSpec;

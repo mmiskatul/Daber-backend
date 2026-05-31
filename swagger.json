@@ -1,0 +1,966 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Daber Backend API",
+    "version": "1.0.0",
+    "description": "Firebase-authenticated backend for storing Daber user records."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current hosting server (default)"
+    },
+    {
+      "url": "http://localhost:4000",
+      "description": "Local development server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "SyncUserRequest": {
+        "type": "object",
+        "properties": {
+          "firstName": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastName": {
+            "type": "string",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "username": {
+            "type": "string",
+            "nullable": true
+          },
+          "avatarUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "photoURL": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "SyncUserResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "example": true
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "properties": {
+              "uid": {
+                "type": "string"
+              },
+              "isNewUser": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "example": false
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "cause": {}
+            }
+          }
+        }
+      },
+      "UserProfileData": {
+        "type": "object",
+        "properties": {
+          "uid": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "emailVerified": {
+            "type": "boolean"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "photoURL": {
+            "type": "string",
+            "nullable": true
+          },
+          "provider": {
+            "type": "string",
+            "nullable": true
+          },
+          "firstName": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastName": {
+            "type": "string",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "username": {
+            "type": "string",
+            "nullable": true
+          },
+          "avatarUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "UserProfileResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "example": true
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "$ref": "#/components/schemas/UserProfileData"
+          }
+        }
+      },
+      "OnboardingData": {
+        "type": "object",
+        "properties": {
+          "native": {
+            "type": "string",
+            "example": "English"
+          },
+          "level": {
+            "type": "string",
+            "example": "A2"
+          },
+          "goal": {
+            "type": "string",
+            "example": "travel"
+          },
+          "voice": {
+            "type": "string",
+            "example": "dana"
+          }
+        }
+      },
+      "OnboardingRequest": {
+        "$ref": "#/components/schemas/OnboardingData"
+      },
+      "OnboardingResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "example": true
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "$ref": "#/components/schemas/OnboardingData"
+          }
+        }
+      },
+      "ScenarioThemeData": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "supermarket"
+          },
+          "title": {
+            "type": "string",
+            "example": "Supermarket"
+          },
+          "he": {
+            "type": "string",
+            "example": "בַּסּוּפֶּר"
+          },
+          "heChar": {
+            "type": "string",
+            "example": "ס"
+          },
+          "band": {
+            "type": "string",
+            "example": "A2–B1"
+          },
+          "blurb": {
+            "type": "string"
+          },
+          "locked": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ScenarioLaunchResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "example": true
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "properties": {
+              "sessionId": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string",
+                "example": "openai"
+              },
+              "providerConfigured": {
+                "type": "boolean"
+              },
+              "theme": {
+                "$ref": "#/components/schemas/ScenarioThemeData"
+              },
+              "tutorVoice": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "example": "dana"
+                  },
+                  "name": {
+                    "type": "string",
+                    "example": "Dana"
+                  },
+                  "subtitle": {
+                    "type": "string",
+                    "example": "Warm, patient, direct."
+                  }
+                }
+              },
+              "conversation": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "starterLine": {
+                    "type": "string"
+                  },
+                  "promptSeed": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "ScenarioTurnData": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "example": "tutor"
+          },
+          "text": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-05-26T12:00:00.000Z"
+          },
+          "inputMode": {
+            "type": "string",
+            "nullable": true,
+            "example": "voice"
+          },
+          "provider": {
+            "type": "string",
+            "nullable": true,
+            "example": "openai"
+          },
+          "model": {
+            "type": "string",
+            "nullable": true,
+            "example": "gpt-4.1-mini"
+          },
+          "liveModelCall": {
+            "type": "boolean",
+            "nullable": true,
+            "example": false
+          },
+          "pronunciation": {
+            "nullable": true,
+            "$ref": "#/components/schemas/PronunciationData"
+          }
+        }
+      },
+      "PronunciationData": {
+        "type": "object",
+        "properties": {
+          "overallScore": {
+            "type": "integer",
+            "example": 82
+          },
+          "accuracyScore": {
+            "type": "integer",
+            "example": 80
+          },
+          "fluencyScore": {
+            "type": "integer",
+            "example": 85
+          },
+          "feedback": {
+            "type": "string",
+            "example": "Stress the final word less and keep the vowel longer."
+          },
+          "scoringMode": {
+            "type": "string",
+            "example": "audio"
+          }
+        }
+      },
+      "ScenarioSessionResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "example": true
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object"
+          }
+        }
+      },
+      "ScenarioMessageResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "example": true
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "properties": {
+              "sessionId": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string",
+                "example": "openai"
+              },
+              "providerConfigured": {
+                "type": "boolean"
+              },
+              "model": {
+                "type": "string",
+                "example": "gpt-4.1-mini"
+              },
+              "learnerTurn": {
+                "$ref": "#/components/schemas/ScenarioTurnData"
+              },
+              "tutorTurn": {
+                "$ref": "#/components/schemas/ScenarioTurnData"
+              }
+            }
+          }
+        }
+      },
+      "ScenarioVoiceResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "example": true
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "properties": {
+              "sessionId": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string",
+                "example": "openai"
+              },
+              "providerConfigured": {
+                "type": "boolean"
+              },
+              "model": {
+                "type": "string",
+                "example": "gpt-4o-mini-transcribe"
+              },
+              "transcript": {
+                "type": "string",
+                "example": "Ani mevakesh beitzim bevakasha."
+              },
+              "pronunciation": {
+                "$ref": "#/components/schemas/PronunciationData"
+              },
+              "learnerTurn": {
+                "$ref": "#/components/schemas/ScenarioTurnData"
+              },
+              "tutorTurn": {
+                "$ref": "#/components/schemas/ScenarioTurnData"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Root API status",
+        "responses": {
+          "200": {
+            "description": "API is running"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "Backend is running"
+          }
+        }
+      }
+    },
+    "/scenarios/themes": {
+      "get": {
+        "tags": [
+          "Scenarios"
+        ],
+        "summary": "List available scenario themes from the prototype catalog",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scenario themes returned"
+          },
+          "401": {
+            "description": "Missing or invalid Firebase token"
+          }
+        }
+      }
+    },
+    "/scenarios/launch": {
+      "post": {
+        "tags": [
+          "Scenarios"
+        ],
+        "summary": "Launch a scenario using the user's onboarding-selected voice",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "themeId": {
+                    "type": "string",
+                    "example": "supermarket"
+                  },
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "gemini",
+                      "openai"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Scenario launch payload"
+          },
+          "400": {
+            "description": "Invalid theme or locked theme"
+          },
+          "401": {
+            "description": "Missing or invalid Firebase token"
+          }
+        }
+      }
+    },
+    "/scenarios/sessions/{sessionId}": {
+      "get": {
+        "tags": [
+          "Scenarios"
+        ],
+        "summary": "Get a launched scenario session",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scenario session returned"
+          },
+          "401": {
+            "description": "Missing or invalid Firebase token"
+          },
+          "404": {
+            "description": "Scenario session not found"
+          }
+        }
+      }
+    },
+    "/scenarios/sessions/{sessionId}/message": {
+      "post": {
+        "tags": [
+          "Scenarios"
+        ],
+        "summary": "Add a learner message to a scenario session and get a tutor reply",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "message": {
+                    "type": "string",
+                    "example": "I am looking for eggs, please."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Scenario tutor reply"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Missing or invalid Firebase token"
+          },
+          "404": {
+            "description": "Scenario session not found"
+          }
+        }
+      }
+    },
+    "/scenarios/sessions/{sessionId}/voice": {
+      "post": {
+        "tags": [
+          "Scenarios"
+        ],
+        "summary": "Add a learner voice turn to a scenario session and get pronunciation scoring plus a tutor reply",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "audioBase64": {
+                    "type": "string"
+                  },
+                  "mimeType": {
+                    "type": "string",
+                    "example": "audio/mp4"
+                  },
+                  "fileName": {
+                    "type": "string",
+                    "example": "learner.m4a"
+                  },
+                  "referenceText": {
+                    "type": "string",
+                    "example": "Ani mevakesh beitzim bevakasha."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Scenario voice response"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Missing or invalid Firebase token"
+          },
+          "404": {
+            "description": "Scenario session not found"
+          }
+        }
+      }
+    },
+    "/scenarios/roadmap": {
+      "get": {
+        "tags": [
+          "Scenarios"
+        ],
+        "summary": "Retrieve the personalized learning roadmap for the authenticated user",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Personalized roadmap stops returned"
+          },
+          "401": {
+            "description": "Missing or invalid Firebase token"
+          }
+        }
+      }
+    },
+    "/scenarios/roadmap/complete": {
+      "post": {
+        "tags": [
+          "Scenarios"
+        ],
+        "summary": "Mark a roadmap stop as completed",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "stopId": {
+                    "type": "string",
+                    "example": "s4"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Roadmap stop marked as completed successfully"
+          },
+          "400": {
+            "description": "Invalid or missing stopId"
+          },
+          "401": {
+            "description": "Missing or invalid Firebase token"
+          }
+        }
+      }
+    },
+    "/onboarding": {
+      "get": {
+        "tags": [
+          "Onboarding"
+        ],
+        "summary": "Get the current authenticated user's onboarding data",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Onboarding data fetched",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid Firebase token"
+          },
+          "404": {
+            "description": "Onboarding data not found"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Onboarding"
+        ],
+        "summary": "Save the current authenticated user's onboarding answers",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnboardingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Onboarding saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid onboarding payload"
+          },
+          "401": {
+            "description": "Missing or invalid Firebase token"
+          }
+        }
+      }
+    },
+    "/auth/sync-user": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Exchange a Firebase ID token for custom backend session tokens and sync user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "firebaseToken"
+                ],
+                "properties": {
+                  "firebaseToken": {
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "type": "string"
+                  },
+                  "photoURL": {
+                    "type": "string"
+                  },
+                  "firstName": {
+                    "type": "string"
+                  },
+                  "lastName": {
+                    "type": "string"
+                  },
+                  "username": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User synced and tokens issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object",
+                      "properties": {
+                        "uid": {
+                          "type": "string"
+                        },
+                        "isNewUser": {
+                          "type": "boolean"
+                        },
+                        "accessToken": {
+                          "type": "string"
+                        },
+                        "refreshToken": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Refresh custom backend access token using a refresh token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "refreshToken"
+                ],
+                "properties": {
+                  "refreshToken": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Fresh access token generated"
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Get the current authenticated user's stored profile",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stored user profile"
+          }
+        }
+      }
+    }
+  },
+  "tags": []
+}
