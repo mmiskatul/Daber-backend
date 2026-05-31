@@ -73,6 +73,8 @@ function buildPrompt(context: ScenarioTutorContext): string {
     "Return JSON only with keys reply and translation.",
     "reply must be Hebrew only.",
     "translation must be a concise support translation in the learner native language only.",
+    "Never include the learner native language, English, or transliteration inside reply.",
+    "All non-Hebrew support text must go in translation only.",
     "If the learner native language is missing or set to Other, use English for translation.",
     "Do not include multiple support languages.",
     context.starterLine ? `Original starter line: ${context.starterLine}` : "",
@@ -331,6 +333,8 @@ async function analyzeVoiceTurnWithGemini(context: ScenarioVoiceContext): Promis
     "tutorReply should be a short, natural tutor turn suitable for a live spoken roleplay.",
     "tutorReply must be Hebrew only.",
     "translation must be a concise support translation in the learner native language only.",
+    "Never include the learner native language, English, or transliteration inside tutorReply.",
+    "All non-Hebrew support text must go in translation only.",
     context.native ? `Learner native language: ${context.native}` : "Learner native language: English"
   ]
     .filter(Boolean)
