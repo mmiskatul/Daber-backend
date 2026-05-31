@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { Router } from "express";
 import { FieldValue } from "firebase-admin/firestore";
 import admin from "../firebaseAdmin";
@@ -16,6 +16,8 @@ import {
 } from "../scenarioCatalog";
 import {
   generateScenarioTutorReply,
+  generateSupportTranslation,
+  generateTutorSpeech,
   generateScenarioVoiceReply,
   generateScenarioVoiceReplyFromTranscript,
   transcribeScenarioVoice
@@ -41,6 +43,15 @@ type ScenarioVoiceBody = {
 type ScenarioVoiceRespondBody = {
   transcript?: string;
   referenceText?: string;
+};
+
+type ScenarioTranslationBody = {
+  text?: string;
+  native?: string;
+};
+
+type ScenarioSpeechBody = {
+  text?: string;
 };
 
 const router = Router();
@@ -140,6 +151,25 @@ function getRequiredParam(value: string | string[] | undefined, name: string): s
   throw new AppError(400, "MISSING_ROUTE_PARAM", `Missing required route parameter: ${name}.`);
 }
 
+function getCurrentNativeLanguage(userData: unknown, session: Record<string, any>): string | null {
+  const onboarding = userData && typeof userData === "object" ? (userData as { onboarding?: { native?: string } }).onboarding : undefined;
+  return onboarding?.native || session.learnerProfile?.native || null;
+}
+
+function getSupportTranslationKey(text: string): string {
+  return createHash("sha1").update(text.trim()).digest("hex");
+}
+
+function isHebrewOnlyInput(text: string): boolean {
+  const trimmed = text.trim();
+
+  if (!trimmed) {
+    return false;
+  }
+
+  return !/[A-Za-z]/.test(trimmed) && /^[\u0590-\u05FF0-9\s.,!?'"():;+\-/%]+$/u.test(trimmed);
+}
+
 async function getOwnedSession(userUid: string, sessionId: string) {
   const sessionRef = db.collection("users").doc(userUid).collection("scenarioSessions").doc(sessionId);
   const snapshot = await sessionRef.get();
@@ -189,7 +219,7 @@ router.get(
       throw new AppError(401, "UNAUTHENTICATED", "Authenticated user was not attached to the request.");
     }
 
-    await ensureUserDocument(req.firebaseUser);
+    const { snapshot: userSnapshot } = await ensureUserDocument(req.firebaseUser);
 
     res.status(200).json({
       status: true,
@@ -422,7 +452,7 @@ router.get(
  *         description: Scenario session not found
  */
 router.post(
-  "/sessions/:sessionId/message",
+  "/sessions/:sessionId/speech",
   authenticateFirebaseUser,
   asyncHandler(async (req, res) => {
     if (!req.firebaseUser) {
@@ -431,6 +461,112 @@ router.post(
 
     await ensureUserDocument(req.firebaseUser);
     const sessionId = getRequiredParam(req.params.sessionId, "sessionId");
+    const body = (req.body ?? {}) as ScenarioSpeechBody;
+    const text = typeof body.text === "string" ? body.text.trim() : "";
+
+    if (!text) {
+      throw new AppError(400, "MISSING_SPEECH_TEXT", "Tutor speech generation requires a non-empty text field.");
+    }
+
+    const { snapshot } = await getOwnedSession(req.firebaseUser.uid, sessionId);
+    const session = snapshot.data() || {};
+    const tutorVoice = session.tutorVoice || { name: "Dana" };
+    const speech = await generateTutorSpeech({
+      text,
+      tutorName: tutorVoice.name || "Dana"
+    });
+
+    res.status(200).json({
+      status: true,
+      message: "Tutor speech generated successfully.",
+      details: speech
+    });
+  })
+);
+
+router.post(
+  "/sessions/:sessionId/translate",
+  authenticateFirebaseUser,
+  asyncHandler(async (req, res) => {
+    if (!req.firebaseUser) {
+      throw new AppError(401, "UNAUTHENTICATED", "Authenticated user was not attached to the request.");
+    }
+
+    const { snapshot: userSnapshot } = await ensureUserDocument(req.firebaseUser);
+    const sessionId = getRequiredParam(req.params.sessionId, "sessionId");
+    const body = (req.body ?? {}) as ScenarioTranslationBody;
+    const text = typeof body.text === "string" ? body.text.trim() : "";
+
+    if (!text) {
+      throw new AppError(400, "MISSING_TRANSLATION_TEXT", "Support translation requires a non-empty text field.");
+    }
+
+    const { sessionRef, snapshot } = await getOwnedSession(req.firebaseUser.uid, sessionId);
+    const session = snapshot.data() || {};
+    const provider = session.provider === "openai" ? "openai" : "gemini";
+    const native = (typeof body.native === "string" && body.native.trim()) || getCurrentNativeLanguage(userSnapshot.data(), session) || "English";
+    const translationKey = getSupportTranslationKey(text);
+    const storedTranslation = session.supportTranslations?.[native]?.[translationKey];
+    const cachedTranslation =
+      typeof storedTranslation === "string"
+        ? storedTranslation.trim()
+        : typeof storedTranslation?.translation === "string"
+          ? storedTranslation.translation.trim()
+          : "";
+
+    if (cachedTranslation) {
+      res.status(200).json({
+        status: true,
+        message: "Support translation loaded from session cache.",
+        details: {
+          translation: cachedTranslation,
+          provider,
+          model: provider === "openai" ? config.openAiModel : config.geminiModel,
+          liveModelCall: false
+        }
+      });
+      return;
+    }
+
+    const translation = await generateSupportTranslation({
+      provider,
+      native,
+      text
+    });
+
+    await sessionRef.set(
+      {
+        supportTranslations: {
+          [native]: {
+            [translationKey]: {
+              sourceText: text,
+              translation: translation.translation
+            }
+          }
+        },
+        updatedAt: FieldValue.serverTimestamp()
+      },
+      { merge: true }
+    );
+
+    res.status(200).json({
+      status: true,
+      message: "Support translation generated successfully.",
+      details: translation
+    });
+  })
+);
+
+router.post(
+  "/sessions/:sessionId/message",
+  authenticateFirebaseUser,
+  asyncHandler(async (req, res) => {
+    if (!req.firebaseUser) {
+      throw new AppError(401, "UNAUTHENTICATED", "Authenticated user was not attached to the request.");
+    }
+
+    const { snapshot: userSnapshot } = await ensureUserDocument(req.firebaseUser);
+    const sessionId = getRequiredParam(req.params.sessionId, "sessionId");
     const body = (req.body ?? {}) as ScenarioMessageBody;
     const message = typeof body.message === "string" ? body.message.trim() : "";
 
@@ -438,8 +574,13 @@ router.post(
       throw new AppError(400, "MISSING_SCENARIO_MESSAGE", "Scenario message requires a non-empty message field.");
     }
 
+    if (!isHebrewOnlyInput(message)) {
+      throw new AppError(400, "SCENARIO_MESSAGE_MUST_BE_HEBREW", "Scenario learner text must be Hebrew only.");
+    }
+
     const { sessionRef, snapshot } = await getOwnedSession(req.firebaseUser.uid, sessionId);
     const session = snapshot.data() || {};
+    const native = getCurrentNativeLanguage(userSnapshot.data(), session);
     const provider = session.provider === "openai" ? "openai" : "gemini";
     const tutorVoice = session.tutorVoice || { name: "Dana" };
     const theme = session.theme || { id: "supermarket" };
@@ -466,7 +607,7 @@ router.post(
         situation: session.variation?.situation || "",
         level: session.learnerProfile?.level || null,
         goal: session.learnerProfile?.goal || null,
-        native: session.learnerProfile?.native || null,
+        native,
         starterLine: session.conversation?.starterLine || "",
         priorTurns: Array.isArray(session.turns) ? session.turns : [],
         learnerMessage: message
@@ -573,7 +714,7 @@ router.post(
       throw new AppError(401, "UNAUTHENTICATED", "Authenticated user was not attached to the request.");
     }
 
-    await ensureUserDocument(req.firebaseUser);
+    const { snapshot: userSnapshot } = await ensureUserDocument(req.firebaseUser);
     const sessionId = getRequiredParam(req.params.sessionId, "sessionId");
     const body = (req.body ?? {}) as ScenarioVoiceBody;
     const audioBase64 = typeof body.audioBase64 === "string" ? body.audioBase64.trim() : "";
@@ -587,6 +728,7 @@ router.post(
 
     const { snapshot } = await getOwnedSession(req.firebaseUser.uid, sessionId);
     const session = snapshot.data() || {};
+    const native = getCurrentNativeLanguage(userSnapshot.data(), session);
     const provider = session.provider === "openai" ? "openai" : "gemini";
     const tutorVoice = session.tutorVoice || { name: "Dana", subtitle: "Warm, patient, direct." };
     const theme = session.theme || { id: "supermarket", title: "Scenario" };
@@ -600,7 +742,7 @@ router.post(
       situation: session.variation?.situation || "",
       level: session.learnerProfile?.level || null,
       goal: session.learnerProfile?.goal || null,
-      native: session.learnerProfile?.native || null,
+      native,
       starterLine: session.conversation?.starterLine || "",
       priorTurns: Array.isArray(session.turns) ? session.turns : [],
       learnerMessage: "",
@@ -635,7 +777,7 @@ router.post(
       throw new AppError(401, "UNAUTHENTICATED", "Authenticated user was not attached to the request.");
     }
 
-    await ensureUserDocument(req.firebaseUser);
+    const { snapshot: userSnapshot } = await ensureUserDocument(req.firebaseUser);
     const sessionId = getRequiredParam(req.params.sessionId, "sessionId");
     const body = (req.body ?? {}) as ScenarioVoiceRespondBody;
     const transcript = typeof body.transcript === "string" ? body.transcript.trim() : "";
@@ -645,8 +787,13 @@ router.post(
       throw new AppError(400, "MISSING_SCENARIO_TRANSCRIPT", "Scenario voice response requires a non-empty transcript field.");
     }
 
+    if (!isHebrewOnlyInput(transcript)) {
+      throw new AppError(400, "SCENARIO_TRANSCRIPT_MUST_BE_HEBREW", "Scenario learner speech must resolve to Hebrew only.");
+    }
+
     const { sessionRef, snapshot } = await getOwnedSession(req.firebaseUser.uid, sessionId);
     const session = snapshot.data() || {};
+    const native = getCurrentNativeLanguage(userSnapshot.data(), session);
     const provider = session.provider === "openai" ? "openai" : "gemini";
     const tutorVoice = session.tutorVoice || { name: "Dana", subtitle: "Warm, patient, direct." };
     const theme = session.theme || { id: "supermarket", title: "Scenario" };
@@ -666,7 +813,7 @@ router.post(
         situation: session.variation?.situation || "",
         level: session.learnerProfile?.level || null,
         goal: session.learnerProfile?.goal || null,
-        native: session.learnerProfile?.native || null,
+        native,
         starterLine: session.conversation?.starterLine || "",
         priorTurns: Array.isArray(session.turns) ? session.turns : [],
         referenceText,
@@ -680,7 +827,18 @@ router.post(
         accuracyScore: 74,
         fluencyScore: 77,
         feedback: "Keep the phrase shorter and repeat the target sound more clearly.",
-        scoringMode: "transcript" as const
+        scoringMode: "transcript" as const,
+        issues: [
+          {
+            label: "TZADI",
+            issueCount: 1,
+            severity: "medium" as const,
+            affectedWord: "ביצים",
+            expectedSound: "ts",
+            heardApproximation: "s",
+            hint: "Keep the tzadi as one crisp ts sound."
+          }
+        ]
       };
       tutorReply = {
         ...buildMockTutorReplyPayload({
@@ -749,7 +907,7 @@ router.post(
       throw new AppError(401, "UNAUTHENTICATED", "Authenticated user was not attached to the request.");
     }
 
-    await ensureUserDocument(req.firebaseUser);
+    const { snapshot: userSnapshot } = await ensureUserDocument(req.firebaseUser);
     const sessionId = getRequiredParam(req.params.sessionId, "sessionId");
     const body = (req.body ?? {}) as ScenarioVoiceBody;
     const audioBase64 = typeof body.audioBase64 === "string" ? body.audioBase64.trim() : "";
@@ -763,6 +921,7 @@ router.post(
 
     const { sessionRef, snapshot } = await getOwnedSession(req.firebaseUser.uid, sessionId);
     const session = snapshot.data() || {};
+    const native = getCurrentNativeLanguage(userSnapshot.data(), session);
     const provider = session.provider === "openai" ? "openai" : "gemini";
     const tutorVoice = session.tutorVoice || { name: "Dana", subtitle: "Warm, patient, direct." };
     const theme = session.theme || { id: "supermarket", title: "Scenario" };
@@ -778,7 +937,7 @@ router.post(
       situation: session.variation?.situation || "",
       level: session.learnerProfile?.level || null,
       goal: session.learnerProfile?.goal || null,
-      native: session.learnerProfile?.native || null,
+      native,
       starterLine: session.conversation?.starterLine || "",
       priorTurns: Array.isArray(session.turns) ? session.turns : [],
       learnerMessage: "",

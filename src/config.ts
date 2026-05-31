@@ -11,6 +11,8 @@ type EnvConfig = {
   openAiApiKey: string;
   openAiModel: string;
   openAiTranscriptionModel: string;
+  openAiTtsModel: string;
+  openAiTtsVoice: string;
   geminiApiKey: string;
   geminiModel: string;
   geminiAudioModel: string;
@@ -45,6 +47,8 @@ export const config: EnvConfig = {
   openAiApiKey: getOptionalEnv("OPENAI_API_KEY"),
   openAiModel: getOptionalEnv("OPENAI_SCENARIO_MODEL", "gpt-4.1-mini"),
   openAiTranscriptionModel: getOptionalEnv("OPENAI_TRANSCRIPTION_MODEL", "gpt-4o-mini-transcribe"),
+  openAiTtsModel: getOptionalEnv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
+  openAiTtsVoice: getOptionalEnv("OPENAI_TTS_VOICE", "coral"),
   geminiApiKey: getOptionalEnv("GEMINI_API_KEY"),
   geminiModel: getOptionalEnv("GEMINI_SCENARIO_MODEL", "gemini-2.0-flash"),
   geminiAudioModel: getOptionalEnv("GEMINI_AUDIO_MODEL", "gemini-2.5-flash"),

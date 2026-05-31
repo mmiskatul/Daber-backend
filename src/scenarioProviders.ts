@@ -29,12 +29,39 @@ type ScenarioProviderResult = {
   liveModelCall: boolean;
 };
 
+type ScenarioTranslationResult = {
+  translation: string;
+  provider: "gemini" | "openai";
+  model: string;
+  liveModelCall: boolean;
+};
+
+type ScenarioSpeechResult = {
+  audioBase64: string;
+  mimeType: string;
+  provider: "openai";
+  model: string;
+  voice: string;
+  liveModelCall: boolean;
+};
+
+type PronunciationIssue = {
+  label: string;
+  issueCount: number;
+  severity: "low" | "medium" | "high";
+  affectedWord: string;
+  expectedSound: string;
+  heardApproximation: string;
+  hint: string;
+};
+
 type PronunciationAssessment = {
   overallScore: number;
   accuracyScore: number;
   fluencyScore: number;
   feedback: string;
   scoringMode: "audio" | "transcript";
+  issues: PronunciationIssue[];
 };
 
 type ScenarioVoiceContext = ScenarioTutorContext & {
@@ -110,13 +137,64 @@ function extractJsonObject(text: string): string {
 
 function normalizePronunciation(value: unknown, scoringMode: "audio" | "transcript"): PronunciationAssessment {
   const parsed = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const rawIssues = Array.isArray(parsed.issues) ? parsed.issues : [];
+  const normalizedIssues = rawIssues
+    .map((item) => {
+      const issue = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+      const label = typeof issue.label === "string" && issue.label.trim() ? issue.label.trim().toUpperCase() : "SOUND";
+      const issueCount = Math.max(1, clampScore(issue.issueCount) || 1);
+      const severity =
+        issue.severity === "high" || issue.severity === "low" || issue.severity === "medium" ? issue.severity : "medium";
+      const affectedWord = typeof issue.affectedWord === "string" && issue.affectedWord.trim() ? issue.affectedWord.trim() : "Unknown";
+      const expectedSound = typeof issue.expectedSound === "string" && issue.expectedSound.trim() ? issue.expectedSound.trim() : "target sound";
+      const heardApproximation =
+        typeof issue.heardApproximation === "string" && issue.heardApproximation.trim() ? issue.heardApproximation.trim() : "unclear";
+      const hint =
+        typeof issue.hint === "string" && issue.hint.trim() ? issue.hint.trim() : "Repeat the target sound more clearly.";
+
+      return {
+        label,
+        issueCount,
+        severity,
+        affectedWord,
+        expectedSound,
+        heardApproximation,
+        hint
+      } satisfies PronunciationIssue;
+    })
+    .slice(0, 4);
+  const issues = normalizedIssues.sort((left, right) => {
+    const leftTzadi = left.label === "TZADI" ? 1 : 0;
+    const rightTzadi = right.label === "TZADI" ? 1 : 0;
+
+    if (leftTzadi !== rightTzadi) {
+      return rightTzadi - leftTzadi;
+    }
+
+    const severityRank = { high: 3, medium: 2, low: 1 } as const;
+    const severityDelta = severityRank[right.severity] - severityRank[left.severity];
+
+    if (severityDelta !== 0) {
+      return severityDelta;
+    }
+
+    return right.issueCount - left.issueCount;
+  });
+
+  const feedback =
+    typeof parsed.feedback === "string" && parsed.feedback.trim()
+      ? parsed.feedback.trim()
+      : issues[0]
+        ? `${issues[0].label}: ${issues[0].hint}`
+        : "Keep the sentence shorter and stress the key word more clearly.";
 
   return {
     overallScore: clampScore(parsed.overallScore),
     accuracyScore: clampScore(parsed.accuracyScore),
     fluencyScore: clampScore(parsed.fluencyScore),
-    feedback: typeof parsed.feedback === "string" && parsed.feedback.trim() ? parsed.feedback.trim() : "Keep the sentence shorter and stress the key word more clearly.",
-    scoringMode
+    feedback,
+    scoringMode,
+    issues
   };
 }
 
@@ -301,8 +379,13 @@ async function assessPronunciationFromTranscript(input: {
 }): Promise<PronunciationAssessment> {
   const prompt = [
     "You are grading a language learner's spoken attempt.",
-    "Return JSON only with keys overallScore, accuracyScore, fluencyScore, feedback.",
+    "Return JSON only with keys overallScore, accuracyScore, fluencyScore, feedback, issues.",
     "Scores must be integers 0-100.",
+    "issues must be an array with up to 4 objects.",
+    "Each issue object must contain: label, issueCount, severity, affectedWord, expectedSound, heardApproximation, hint.",
+    "severity must be one of low, medium, high.",
+    "If a tzadi pronunciation issue is present, label it exactly TZADI and include it in issues.",
+    "Prioritize TZADI as the top issue when it is present.",
     input.referenceText ? `Expected phrase: ${input.referenceText}` : "No expected phrase was provided. Judge only clarity and likely pronunciation quality from the transcript.",
     `Learner transcript: ${input.transcript}`,
     "Feedback must be one short coaching sentence."
@@ -328,7 +411,11 @@ async function analyzeVoiceTurnWithGemini(context: ScenarioVoiceContext): Promis
     context.referenceText ? `Target phrase the learner intended to say: ${context.referenceText}` : "",
     "Analyze the audio and return JSON only.",
     "Required JSON keys: transcript, pronunciation, tutorReply, translation.",
-    "pronunciation must include overallScore, accuracyScore, fluencyScore, feedback.",
+    "pronunciation must include overallScore, accuracyScore, fluencyScore, feedback, issues.",
+    "issues must be an array with up to 4 objects.",
+    "Each issue object must contain: label, issueCount, severity, affectedWord, expectedSound, heardApproximation, hint.",
+    "If a tzadi pronunciation issue is present, label it exactly TZADI and include it in issues.",
+    "Prioritize TZADI as the top issue when it is present.",
     "Scores must be integers 0-100.",
     "tutorReply should be a short, natural tutor turn suitable for a live spoken roleplay.",
     "tutorReply must be Hebrew only.",
@@ -493,6 +580,89 @@ export async function generateScenarioTutorReply(context: ScenarioTutorContext):
 
   const text = await callGeminiText(prompt);
   return normalizeScenarioReply(text, "gemini", config.geminiModel);
+}
+
+export async function generateSupportTranslation(input: {
+  provider: "gemini" | "openai";
+  native?: string | null;
+  text: string;
+}): Promise<ScenarioTranslationResult> {
+  const prompt = [
+    "Translate this Hebrew tutor line into the learner support language.",
+    `Support language: ${input.native && input.native !== "Other" ? input.native : "English"}`,
+    "Return JSON only with key translation.",
+    "Keep the translation concise, natural, and faithful to the Hebrew meaning.",
+    `Hebrew tutor line: ${input.text}`
+  ].join("\n");
+
+  const model = input.provider === "openai" ? config.openAiModel : config.geminiModel;
+  const rawText = input.provider === "openai" ? await callOpenAiText(prompt) : await callGeminiText(prompt);
+
+  try {
+    const parsed = JSON.parse(extractJsonObject(rawText)) as { translation?: unknown };
+    const translation = typeof parsed.translation === "string" ? parsed.translation.trim() : "";
+
+    if (translation) {
+      return {
+        translation,
+        provider: input.provider,
+        model,
+        liveModelCall: true
+      };
+    }
+  } catch {
+    // Fall through to plain-text fallback.
+  }
+
+  return {
+    translation: rawText.trim(),
+    provider: input.provider,
+    model,
+    liveModelCall: true
+  };
+}
+
+export async function generateTutorSpeech(input: {
+  text: string;
+  tutorName?: string;
+}): Promise<ScenarioSpeechResult> {
+  if (!config.openAiApiKey) {
+    throw new AppError(500, "OPENAI_API_KEY_MISSING", "OPENAI_API_KEY is not configured.");
+  }
+
+  const voice =
+    input.tutorName === "Noam" ? "sage" : input.tutorName === "Shira" ? "verse" : config.openAiTtsVoice;
+
+  const response = await fetch("https://api.openai.com/v1/audio/speech", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.openAiApiKey}`
+    },
+    body: JSON.stringify({
+      model: config.openAiTtsModel,
+      voice,
+      input: input.text,
+      response_format: "mp3",
+      instructions: "Speak naturally in Hebrew. Keep the pacing conversational and clear."
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new AppError(502, "OPENAI_TTS_FAILED", errorText || "OpenAI speech generation failed.");
+  }
+
+  const audioBuffer = Buffer.from(await response.arrayBuffer());
+
+  return {
+    audioBase64: audioBuffer.toString("base64"),
+    mimeType: "audio/mpeg",
+    provider: "openai",
+    model: config.openAiTtsModel,
+    voice,
+    liveModelCall: true
+  };
 }
 
 export async function transcribeScenarioVoice(context: ScenarioVoiceContext): Promise<ScenarioVoiceTranscriptResult> {

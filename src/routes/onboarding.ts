@@ -12,6 +12,10 @@ type OnboardingBody = {
   voice?: string;
 };
 
+type OnboardingLanguageBody = {
+  native?: string;
+};
+
 type OnboardingData = {
   native: string;
   level: string;
@@ -19,7 +23,21 @@ type OnboardingData = {
   voice: string;
 };
 
-const ALLOWED_NATIVE = new Set(["English", "Español", "Français", "Русский", "Other"]);
+const NATIVE_ALIASES: Record<string, string> = {
+  English: "English",
+  Spanish: "Spanish",
+  "EspaÃƒÂ±ol": "Spanish",
+  "EspaÃ±ol": "Spanish",
+  French: "French",
+  "FranÃƒÂ§ais": "French",
+  "FranÃ§ais": "French",
+  Russian: "Russian",
+  "ÃÂ Ã‘Æ’Ã‘ÂÃ‘ÂÃÂºÃÂ¸ÃÂ¹": "Russian",
+  "Ð ÑƒÑÑÐºÐ¸Ð¹": "Russian",
+  Other: "Other"
+};
+
+const ALLOWED_NATIVE = new Set(["English", "Spanish", "French", "Russian", "Other"]);
 const ALLOWED_LEVEL = new Set(["A1", "A2", "B1", "B2", "C1"]);
 const ALLOWED_GOAL = new Set(["travel", "family", "work", "culture"]);
 const ALLOWED_VOICE = new Set(["dana", "noam", "shira"]);
@@ -37,11 +55,19 @@ function ensureAllowed(value: string | null, allowed: Set<string>, field: string
   return value;
 }
 
+function normalizeNativeLanguage(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  return NATIVE_ALIASES[value] || value;
+}
+
 function parseOnboardingBody(body: unknown): OnboardingData {
   const payload = (body ?? {}) as OnboardingBody;
 
   return {
-    native: ensureAllowed(normalizeString(payload.native), ALLOWED_NATIVE, "native"),
+    native: ensureAllowed(normalizeNativeLanguage(normalizeString(payload.native)), ALLOWED_NATIVE, "native"),
     level: ensureAllowed(normalizeString(payload.level), ALLOWED_LEVEL, "level"),
     goal: ensureAllowed(normalizeString(payload.goal), ALLOWED_GOAL, "goal"),
     voice: ensureAllowed(normalizeString(payload.voice), ALLOWED_VOICE, "voice")
@@ -78,7 +104,6 @@ router.get(
     }
 
     const { snapshot } = await ensureUserDocument(req.firebaseUser);
-
     const data = snapshot.data();
 
     if (!data?.onboarding) {
@@ -147,6 +172,61 @@ router.post(
       details: {
         ...onboarding,
         isNewUser
+      }
+    });
+  })
+);
+
+router.patch(
+  "/language",
+  authenticateFirebaseUser,
+  asyncHandler(async (req, res) => {
+    if (!req.firebaseUser) {
+      throw new AppError(401, "UNAUTHENTICATED", "Authenticated user was not attached to the request.");
+    }
+
+    const payload = (req.body ?? {}) as OnboardingLanguageBody;
+    const native = ensureAllowed(normalizeNativeLanguage(normalizeString(payload.native)), ALLOWED_NATIVE, "native");
+    const { ref: userRef, snapshot } = await ensureUserDocument(req.firebaseUser);
+    const current = snapshot.data()?.onboarding || {};
+
+    await userRef.set(
+      {
+        onboarding: {
+          ...current,
+          native
+        },
+        updatedAt: FieldValue.serverTimestamp()
+      },
+      { merge: true }
+    );
+
+    const sessions = await userRef.collection("scenarioSessions").get();
+    const batch = userRef.firestore.batch();
+
+    sessions.docs.forEach((doc) => {
+      batch.set(
+        doc.ref,
+        {
+          learnerProfile: {
+            ...(doc.data().learnerProfile || {}),
+            native
+          },
+          updatedAt: FieldValue.serverTimestamp()
+        },
+        { merge: true }
+      );
+    });
+
+    if (!sessions.empty) {
+      await batch.commit();
+    }
+
+    res.status(200).json({
+      status: true,
+      message: "Support language updated successfully.",
+      details: {
+        native
       }
     });
   })
