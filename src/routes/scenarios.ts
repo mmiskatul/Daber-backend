@@ -993,4 +993,153 @@ router.post(
   })
 );
 
+/**
+ * @openapi
+ * /scenarios/roadmap:
+ *   get:
+ *     tags:
+ *       - Scenarios
+ *     summary: Retrieve the personalized learning roadmap for the authenticated user
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Personalized roadmap stops returned
+ *       401:
+ *         description: Missing or invalid Firebase token
+ */
+router.get(
+  "/roadmap",
+  authenticateFirebaseUser,
+  asyncHandler(async (req, res) => {
+    if (!req.firebaseUser) {
+      throw new AppError(401, "UNAUTHENTICATED", "Authenticated user was not attached to the request.");
+    }
+
+    const { snapshot: userSnapshot } = await ensureUserDocument(req.firebaseUser);
+    const userData = userSnapshot.data() || {};
+    
+    const completedStops = Array.isArray(userData.completedStops) 
+      ? userData.completedStops 
+      : [];
+
+    const template = [
+      { id: "s1", title: "Falafel Stand", he: "דּוּכַן פָּלָאפֶל", fmt: "Roleplay" },
+      { id: "s2", title: "Greeting a Neighbor", he: "שָׁכֵן", fmt: "Roleplay" },
+      { id: "s3", title: "Numbers, 1–20", he: "מִסְפָּרִים", fmt: "Drill" },
+      { id: "cp1", title: "Checkpoint", he: "מִבְחָן", fmt: "Pick a format", isCheckpoint: true },
+      { id: "s4", title: "At the Supermarket", he: "בַּסּוּפֶּר", fmt: "Roleplay" },
+      { id: "s5", title: "Asking for Help", he: "מְבַקֵּשׁ עֶזְרָה", fmt: "Roleplay" },
+      { id: "s6", title: "Café Order", he: "בְּבֵית קָפֶה", fmt: "Roleplay" },
+      { id: "tl1", title: "Past Tense, men.", he: "עָבָר", fmt: "Tutor" },
+      { id: "cp2", title: "Checkpoint", he: "מִבְחָן", fmt: "Pick a format", isCheckpoint: true }
+    ];
+
+    let foundCurrent = false;
+
+    const stops = template.map((item) => {
+      if (item.isCheckpoint) {
+        return {
+          id: item.id,
+          kind: "checkpoint",
+          title: item.title,
+          he: item.he,
+          fmt: item.fmt
+        };
+      }
+
+      if (completedStops.includes(item.id)) {
+        return {
+          id: item.id,
+          kind: "done",
+          title: item.title,
+          he: item.he,
+          fmt: item.fmt
+        };
+      }
+
+      if (!foundCurrent) {
+        foundCurrent = true;
+        return {
+          id: item.id,
+          kind: "current",
+          title: item.title,
+          he: item.he,
+          fmt: item.fmt
+        };
+      }
+
+      return {
+        id: item.id,
+        kind: "locked",
+        title: item.title,
+        he: item.he,
+        fmt: item.fmt
+      };
+    });
+
+    res.status(200).json({
+      status: true,
+      message: "Personalized roadmap fetched successfully.",
+      details: {
+        completedStops,
+        stops
+      }
+    });
+  })
+);
+
+/**
+ * @openapi
+ * /scenarios/roadmap/complete:
+ *   post:
+ *     tags:
+ *       - Scenarios
+ *     summary: Mark a roadmap stop as completed
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               stopId:
+ *                 type: string
+ *                 example: s4
+ *     responses:
+ *       200:
+ *         description: Roadmap stop marked as completed successfully
+ *       400:
+ *         description: Invalid or missing stopId
+ *       401:
+ *         description: Missing or invalid Firebase token
+ */
+router.post(
+  "/roadmap/complete",
+  authenticateFirebaseUser,
+  asyncHandler(async (req, res) => {
+    if (!req.firebaseUser) {
+      throw new AppError(401, "UNAUTHENTICATED", "Authenticated user was not attached to the request.");
+    }
+
+    const { ref: userRef } = await ensureUserDocument(req.firebaseUser);
+    const { stopId } = req.body ?? {};
+
+    if (typeof stopId !== "string" || !stopId.trim()) {
+      throw new AppError(400, "MISSING_STOP_ID", "Completing a stop requires a non-empty stopId.");
+    }
+
+    await userRef.update({
+      completedStops: FieldValue.arrayUnion(stopId.trim())
+    });
+
+    res.status(200).json({
+      status: true,
+      message: `Roadmap stop '${stopId}' completed successfully.`
+    });
+  })
+);
+
 export default router;
