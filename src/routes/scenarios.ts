@@ -103,6 +103,100 @@ function getSupportTranslationKey(text: string): string {
   return createHash("sha1").update(text.trim()).digest("hex");
 }
 
+async function parseScenarioVoiceRequest(req: any): Promise<{
+  audioBase64: string;
+  mimeType: string;
+  fileName: string;
+  referenceText: string;
+}> {
+  const contentType = typeof req.headers?.["content-type"] === "string" ? req.headers["content-type"] : "";
+
+  if (!contentType.includes("multipart/form-data")) {
+    const body = (req.body ?? {}) as ScenarioVoiceBody;
+    const audioBase64 = typeof body.audioBase64 === "string" ? body.audioBase64.trim() : "";
+    const mimeType = typeof body.mimeType === "string" && body.mimeType.trim() ? body.mimeType.trim() : "audio/mp4";
+    const fileName = typeof body.fileName === "string" && body.fileName.trim() ? body.fileName.trim() : "learner-audio.m4a";
+    const referenceText = typeof body.referenceText === "string" ? body.referenceText.trim() : "";
+
+    return { audioBase64, mimeType, fileName, referenceText };
+  }
+
+  const Busboy = require("@fastify/busboy");
+
+  return await new Promise((resolve, reject) => {
+    const busboy = new Busboy({
+      headers: req.headers,
+      limits: {
+        files: 1,
+        fileSize: 12 * 1024 * 1024,
+        fields: 6
+      }
+    });
+
+    let audioBase64 = "";
+    let mimeType = "audio/mp4";
+    let fileName = "learner-audio.m4a";
+    let referenceText = "";
+    let sawAudio = false;
+    let fileTooLarge = false;
+
+    busboy.on("field", (name: string, value: string) => {
+      if (name === "mimeType" && value.trim()) {
+        mimeType = value.trim();
+      } else if (name === "fileName" && value.trim()) {
+        fileName = value.trim();
+      } else if (name === "referenceText") {
+        referenceText = value.trim();
+      }
+    });
+
+    busboy.on("file", (name: string, file: NodeJS.ReadableStream, filename: string, encoding: string, mimetype: string) => {
+      if (name !== "audio") {
+        file.resume();
+        return;
+      }
+
+      sawAudio = true;
+      if (typeof mimetype === "string" && mimetype.trim()) {
+        mimeType = mimetype.trim();
+      }
+      if (typeof filename === "string" && filename.trim()) {
+        fileName = filename.trim();
+      }
+
+      const chunks: Buffer[] = [];
+      file.on("data", (chunk: Buffer) => {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      });
+      file.on("limit", () => {
+        fileTooLarge = true;
+      });
+      file.on("end", () => {
+        if (!fileTooLarge) {
+          audioBase64 = Buffer.concat(chunks).toString("base64");
+        }
+      });
+    });
+
+    busboy.on("error", reject);
+    busboy.on("finish", () => {
+      if (fileTooLarge) {
+        reject(new AppError(413, "VOICE_UPLOAD_TOO_LARGE", "Voice upload is too large. Keep it shorter than 12 seconds."));
+        return;
+      }
+
+      if (!sawAudio || !audioBase64) {
+        reject(new AppError(400, "MISSING_SCENARIO_AUDIO", "Scenario voice request requires an audio file."));
+        return;
+      }
+
+      resolve({ audioBase64, mimeType, fileName, referenceText });
+    });
+
+    req.pipe(busboy);
+  });
+}
+
 function isHebrewOnlyInput(text: string): boolean {
   const trimmed = text.trim();
 
@@ -881,15 +975,7 @@ router.post(
 
     const { snapshot: userSnapshot } = await ensureUserDocument(req.firebaseUser);
     const sessionId = getRequiredParam(req.params.sessionId, "sessionId");
-    const body = (req.body ?? {}) as ScenarioVoiceBody;
-    const audioBase64 = typeof body.audioBase64 === "string" ? body.audioBase64.trim() : "";
-    const mimeType = typeof body.mimeType === "string" && body.mimeType.trim() ? body.mimeType.trim() : "audio/mp4";
-    const fileName = typeof body.fileName === "string" && body.fileName.trim() ? body.fileName.trim() : "learner-audio.m4a";
-    const referenceText = typeof body.referenceText === "string" ? body.referenceText.trim() : "";
-
-    if (!audioBase64) {
-      throw new AppError(400, "MISSING_SCENARIO_AUDIO", "Scenario voice request requires a non-empty audioBase64 field.");
-    }
+    const { audioBase64, mimeType, fileName, referenceText } = await parseScenarioVoiceRequest(req);
 
     const { sessionRef, snapshot } = await getOwnedSession(req.firebaseUser.uid, sessionId);
     const session = snapshot.data() || {};

@@ -49,6 +49,7 @@ function sessionRoom(uid: string, sessionId: string) {
 
 export function attachRealtimeScenarioServer(httpServer: HttpServer) {
   const io = new SocketIOServer(httpServer, {
+    maxHttpBufferSize: 25e6,
     cors: {
       origin: "*"
     },

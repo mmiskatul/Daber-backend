@@ -30,6 +30,42 @@ export function toErrorResponse(error: unknown): {
     };
   }
 
+  if (error && typeof error === "object") {
+    const errorObj = error as {
+      statusCode?: unknown;
+      status?: unknown;
+      message?: unknown;
+      type?: unknown;
+      expose?: unknown;
+    };
+    const maybeStatusCode = errorObj.statusCode;
+    const maybeStatus = errorObj.status;
+    const numericStatusCode =
+      typeof maybeStatusCode === "number" && Number.isFinite(maybeStatusCode)
+        ? maybeStatusCode
+        : typeof maybeStatus === "number" && Number.isFinite(maybeStatus)
+          ? maybeStatus
+          : null;
+
+    if (numericStatusCode) {
+      const message = typeof errorObj.message === "string" && errorObj.message.trim() ? errorObj.message.trim() : "Request failed.";
+      const code = typeof errorObj.type === "string" ? errorObj.type : "HTTP_ERROR";
+      const cause = typeof errorObj.expose === "boolean" && errorObj.expose ? message : null;
+
+      return {
+        statusCode: numericStatusCode,
+        body: {
+          status: false,
+          message,
+          details: {
+            code,
+            cause
+          }
+        }
+      };
+    }
+  }
+
   if (error instanceof Error) {
     return {
       statusCode: 500,
