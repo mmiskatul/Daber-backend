@@ -248,6 +248,62 @@ function extractJsonObject(text: string): string {
   return candidate.slice(start, end + 1);
 }
 
+function extractOpenAiText(payload: unknown): string {
+  if (!payload || typeof payload !== "object") {
+    return "";
+  }
+
+  const pieces: string[] = [];
+  const visited = new Set<object>();
+
+  const visit = (value: unknown, key?: string): void => {
+    if (!value) {
+      return;
+    }
+
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (!text) {
+        return;
+      }
+
+      if (!key || key === "text" || key === "output_text" || key === "content") {
+        pieces.push(text);
+      }
+      return;
+    }
+
+    if (typeof value !== "object") {
+      return;
+    }
+
+    if (visited.has(value)) {
+      return;
+    }
+
+    visited.add(value);
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        visit(item);
+      }
+      return;
+    }
+
+    for (const [childKey, childValue] of Object.entries(value as Record<string, unknown>)) {
+      if (childKey === "error" || childKey === "usage") {
+        continue;
+      }
+      visit(childValue, childKey);
+    }
+  };
+
+  visit(payload);
+
+  const unique = pieces.filter((piece, index) => pieces.indexOf(piece) === index);
+  return unique.join("\n").trim();
+}
+
 function normalizePronunciation(value: unknown, scoringMode: "audio" | "transcript"): PronunciationAssessment {
   const parsed = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
   const rawIssues = Array.isArray(parsed.issues) ? parsed.issues : [];
@@ -368,6 +424,11 @@ async function callOpenAiText(prompt: string): Promise<string> {
   const payload = (await response.json().catch(() => null)) as
     | {
         output_text?: string;
+        output?: Array<{
+          content?: Array<{
+            text?: string;
+          }>;
+        }>;
       }
     | {
         error?: {
@@ -384,10 +445,10 @@ async function callOpenAiText(prompt: string): Promise<string> {
     );
   }
 
-  const text = payload && "output_text" in payload ? payload.output_text || "" : "";
+  const text = extractOpenAiText(payload);
 
   if (!text.trim()) {
-    throw new AppError(502, "OPENAI_EMPTY_RESPONSE", "OpenAI scenario response was empty.");
+    throw new AppError(502, "OPENAI_EMPTY_RESPONSE", `OpenAI scenario response was empty or had an unexpected shape. Keys: ${Object.keys((payload as Record<string, unknown>) || {}).join(", ") || "none"}`);
   }
 
   return text.trim();
