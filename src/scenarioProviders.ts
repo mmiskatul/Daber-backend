@@ -10,6 +10,7 @@ type ScenarioTutorContext = {
   provider: "gemini" | "openai";
   tutorName: string;
   tutorSubtitle?: string;
+  voice?: string | null;
   themeTitle: string;
   themeId: string;
   situation: string;
@@ -81,6 +82,113 @@ type ScenarioVoiceTranscriptResult = {
   transcript: string;
 };
 
+function normalizeLevel(level?: string | null): string {
+  return (level || "").trim().toUpperCase();
+}
+
+export function buildLearnerInstructionSummary(context: Pick<ScenarioTutorContext, "level" | "goal" | "native" | "voice">): string {
+  const level = normalizeLevel(context.level);
+  const goal = (context.goal || "").trim().toLowerCase();
+  const native = (context.native || "").trim();
+  const voice = (context.voice || "").trim();
+  const isBeginner = level === "A1" || level === "A2" || level.includes("BEGINNER");
+  const isIntermediate = level === "B1" || level === "B2" || level.includes("INTERMEDIATE");
+  const isAdvanced = level.startsWith("C") || level.includes("ADVANCED");
+
+  const profileBits = [
+    `native=${native || "unknown"}`,
+    `level=${level || "unknown"}`,
+    `goal=${goal || "unknown"}`,
+    `voice=${voice || "unknown"}`
+  ];
+
+  const guidance: string[] = [];
+
+  if (native && native !== "Other") {
+    guidance.push(`Use ${native} only for support text.`);
+  } else {
+    guidance.push("Use English for support text.");
+  }
+
+  if (isBeginner) {
+    guidance.push("Keep Hebrew simple, concrete, and easy to reuse.");
+    guidance.push("Prefer 2-4 short sentences with one clear example when helpful.");
+  } else if (isIntermediate) {
+    guidance.push("Keep the reply tight and practical.");
+    guidance.push("Prefer 1-3 short sentences with one useful correction or detail.");
+  } else if (isAdvanced) {
+    guidance.push("Keep the Hebrew natural and avoid over-explaining.");
+    guidance.push("Use nuance when it helps the scenario.");
+  }
+
+  switch (goal) {
+    case "travel":
+      guidance.push("Favor street Hebrew, directions, ordering, and quick real-world exchanges.");
+      break;
+    case "family":
+      guidance.push("Favor warm, personal, everyday Hebrew and relationship-friendly phrasing.");
+      break;
+    case "work":
+      guidance.push("Favor professional, polite, and clear Hebrew for workplace communication.");
+      break;
+    case "culture":
+      guidance.push("Favor idioms, expression, nuance, and natural conversational Hebrew.");
+      break;
+    default:
+      break;
+  }
+
+  return `Learner profile: ${profileBits.join(", ")}. ${guidance.join(" ")}`.trim();
+}
+
+function buildLearnerProfileLines(context: Pick<ScenarioTutorContext, "level" | "goal" | "native" | "voice">): string[] {
+  const level = normalizeLevel(context.level);
+  const goal = (context.goal || "").trim().toLowerCase();
+  const native = (context.native || "").trim();
+  const voice = (context.voice || "").trim();
+  const isBeginner = level === "A1" || level === "A2" || level.includes("BEGINNER");
+  const isIntermediate = level === "B1" || level === "B2" || level.includes("INTERMEDIATE");
+  const isAdvanced = level.startsWith("C") || level.includes("ADVANCED");
+
+  const lines = [buildLearnerInstructionSummary(context)];
+
+  if (native && native !== "Other") {
+    lines.push(`Use ${native} only for translation and support text, never inside the Hebrew reply.`);
+  } else {
+    lines.push("Use English for support translation when the learner native language is missing or set to Other.");
+  }
+
+  if (isBeginner) {
+    lines.push("The learner is a beginner, so keep Hebrew simple, concrete, and easy to reuse.");
+    lines.push("Prefer 2-4 short sentences and add one clear example when helpful.");
+  } else if (isIntermediate) {
+    lines.push("The learner is intermediate, so keep the reply tight and practical.");
+    lines.push("Prefer 1-3 short sentences and only one useful correction or detail unless more is needed.");
+  } else if (isAdvanced) {
+    lines.push("The learner is advanced, so keep the Hebrew natural and avoid over-explaining.");
+    lines.push("Use nuance, but stay relevant to the scenario.");
+  }
+
+  switch (goal) {
+    case "travel":
+      lines.push("The learner is studying for travel, so favor practical street Hebrew, directions, ordering, and quick real-world exchanges.");
+      break;
+    case "family":
+      lines.push("The learner is studying for family conversations, so favor warm, personal, everyday Hebrew and relationship-friendly phrasing.");
+      break;
+    case "work":
+      lines.push("The learner is studying for work, so favor professional, polite, and clear Hebrew that fits workplace communication.");
+      break;
+    case "culture":
+      lines.push("The learner is studying for culture, so favor idioms, expression, nuance, and natural conversational Hebrew when useful.");
+      break;
+    default:
+      break;
+  }
+
+  return lines;
+}
+
 function buildPrompt(context: ScenarioTutorContext): string {
   const priorTurns = (context.priorTurns || [])
     .slice(-8)
@@ -92,11 +200,16 @@ function buildPrompt(context: ScenarioTutorContext): string {
     `Tutor style: ${context.tutorSubtitle || "Warm, patient, direct."}`,
     `Scenario theme: ${context.themeTitle} (${context.themeId}).`,
     `Situation: ${context.situation}`,
-    `Learner level: ${context.level || "unknown"}`,
-    `Learner goal: ${context.goal || "unknown"}`,
-    `Learner native language: ${context.native || "unknown"}`,
-    "Reply in a short, natural tutor turn suitable for a live spoken roleplay.",
-    "Keep the reply concise, supportive, and scenario-specific.",
+    ...buildLearnerProfileLines(context),
+    "Reply with the best possible tutor answer for this exact situation.",
+    "Make the reply natural, direct, and useful enough to move the conversation forward.",
+    "Prefer clarity over brevity when the learner needs explanation.",
+    "If the learner asks a question, answer it clearly and completely.",
+    "If the learner makes a mistake, correct it gently and show the better version in natural Hebrew.",
+    "Use the learner profile and scenario context to choose the right amount of detail.",
+    "If a shorter reply is enough, keep it short; otherwise add one helpful detail or example.",
+    "Avoid generic filler, repetition, and vague encouragement.",
+    "Keep the reply supportive and scenario-specific.",
     "Return JSON only with keys reply and translation.",
     "reply must be Hebrew only.",
     "translation must be a concise support translation in the learner native language only.",
@@ -410,6 +523,7 @@ async function analyzeVoiceTurnWithGemini(context: ScenarioVoiceContext): Promis
     `Tutor style: ${context.tutorSubtitle || "Warm, patient, direct."}`,
     `Scenario theme: ${context.themeTitle} (${context.themeId}).`,
     `Situation: ${context.situation}`,
+    ...buildLearnerProfileLines(context),
     context.referenceText ? `Target phrase the learner intended to say: ${context.referenceText}` : "",
     "Analyze the audio and return JSON only.",
     "Required JSON keys: transcript, pronunciation, tutorReply, translation.",
@@ -419,7 +533,12 @@ async function analyzeVoiceTurnWithGemini(context: ScenarioVoiceContext): Promis
     "If a tzadi pronunciation issue is present, label it exactly TZADI and include it in issues.",
     "Prioritize TZADI as the top issue when it is present.",
     "Scores must be integers 0-100.",
-    "tutorReply should be a short, natural tutor turn suitable for a live spoken roleplay.",
+    "tutorReply should be the best possible tutor answer for this situation, natural and useful.",
+    "Prefer clarity over brevity when the learner needs explanation.",
+    "If the learner asks a question, answer it clearly and fully enough to help right away.",
+    "If the learner makes a mistake, correct it gently and show the better version in natural Hebrew.",
+    "Use the scenario context and learner profile to choose the right detail level.",
+    "Avoid generic filler, repetition, and vague encouragement.",
     "tutorReply must be Hebrew only.",
     "translation must be a concise support translation in the learner native language only.",
     "Never include the learner native language, English, or transliteration inside tutorReply.",
@@ -691,6 +810,7 @@ export async function generateScenarioVoiceReplyFromTranscript(
       provider: context.provider,
       tutorName: context.tutorName,
       tutorSubtitle: context.tutorSubtitle,
+      voice: context.voice,
       themeTitle: context.themeTitle,
       themeId: context.themeId,
       situation: context.situation,
@@ -719,6 +839,7 @@ export async function generateScenarioVoiceReply(context: ScenarioVoiceContext):
     provider: "openai",
     tutorName: context.tutorName,
     tutorSubtitle: context.tutorSubtitle,
+    voice: context.voice,
     themeTitle: context.themeTitle,
     themeId: context.themeId,
     situation: context.situation,

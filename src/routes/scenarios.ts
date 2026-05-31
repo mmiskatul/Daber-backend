@@ -15,6 +15,7 @@ import {
   TutorVoiceId
 } from "../scenarioCatalog";
 import {
+  buildLearnerInstructionSummary,
   generateScenarioTutorReply,
   generateSupportTranslation,
   generateTutorSpeech,
@@ -271,6 +272,12 @@ router.post(
       sessionId,
       provider,
       providerConfigured: provider === "openai" ? Boolean(config.openAiApiKey) : Boolean(config.geminiApiKey),
+      learnerInstructionSummary: buildLearnerInstructionSummary({
+        native: onboarding.native || null,
+        level: onboarding.level || null,
+        goal: onboarding.goal || null,
+        voice: onboarding.voice || null
+      }),
       theme: {
         id: theme.id,
         title: theme.title,
@@ -294,7 +301,17 @@ router.post(
       conversation: {
         title: `${tutorVoice.name} · ${theme.title}`,
         starterLine: buildStarterLine(theme.id, tutorVoice.name),
-        promptSeed: `Theme: ${theme.title}. Situation: ${variation.situation}. Tutor voice: ${tutorVoice.name}.`
+        promptSeed: [
+          `Theme: ${theme.title}.`,
+          `Situation: ${variation.situation}.`,
+          `Tutor voice: ${tutorVoice.name}.`,
+          buildLearnerInstructionSummary({
+            native: onboarding.native || null,
+            level: onboarding.level || null,
+            goal: onboarding.goal || null,
+            voice: onboarding.voice || null
+          })
+        ].join(" ")
       }
     };
 
@@ -544,6 +561,7 @@ router.post(
         provider,
         tutorName: tutorVoice.name || "Dana",
         tutorSubtitle: tutorVoice.subtitle || "",
+        voice: tutorVoice.name || null,
         themeTitle: theme.title || "Scenario",
         themeId: theme.id || "supermarket",
         situation: session.variation?.situation || "",
@@ -761,6 +779,7 @@ router.post(
         provider,
         tutorName: tutorVoice.name || "Dana",
         tutorSubtitle: tutorVoice.subtitle || "",
+        voice: tutorVoice.name || null,
         themeTitle: theme.title || "Scenario",
         themeId: theme.id || "supermarket",
         situation: session.variation?.situation || "",
