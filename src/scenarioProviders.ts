@@ -104,11 +104,7 @@ export function buildLearnerInstructionSummary(context: Pick<ScenarioTutorContex
 
   const guidance: string[] = [];
 
-  if (native && native !== "Other") {
-    guidance.push(`Use ${native} only for support text.`);
-  } else {
-    guidance.push("Use English for support text.");
-  }
+  guidance.push("Keep all tutor replies in Hebrew only.");
 
   if (isBeginner) {
     guidance.push("Keep Hebrew simple, concrete, and easy to reuse.");
@@ -152,11 +148,7 @@ function buildLearnerProfileLines(context: Pick<ScenarioTutorContext, "level" | 
 
   const lines = [buildLearnerInstructionSummary(context)];
 
-  if (native && native !== "Other") {
-    lines.push(`Use ${native} only for translation and support text, never inside the Hebrew reply.`);
-  } else {
-    lines.push("Use English for support translation when the learner native language is missing or set to Other.");
-  }
+  lines.push("Keep all tutor replies in Hebrew only.");
 
   if (isBeginner) {
     lines.push("The learner is a beginner, so keep Hebrew simple, concrete, and easy to reuse.");
@@ -210,13 +202,9 @@ function buildPrompt(context: ScenarioTutorContext): string {
     "If a shorter reply is enough, keep it short; otherwise add one helpful detail or example.",
     "Avoid generic filler, repetition, and vague encouragement.",
     "Keep the reply supportive and scenario-specific.",
-    "Return JSON only with keys reply and translation.",
+    "Return JSON only with key reply.",
     "reply must be Hebrew only.",
-    "translation must be a concise support translation in the learner native language only.",
     "Never include the learner native language, English, or transliteration inside reply.",
-    "All non-Hebrew support text must go in translation only.",
-    "If the learner native language is missing or set to Other, use English for translation.",
-    "Do not include multiple support languages.",
     context.starterLine ? `Original starter line: ${context.starterLine}` : "",
     priorTurns ? `Conversation so far:\n${priorTurns}` : "",
     `Learner just said: ${context.learnerMessage}`
@@ -375,16 +363,14 @@ function normalizeScenarioReply(
   try {
     const parsed = JSON.parse(extractJsonObject(rawText)) as {
       reply?: unknown;
-      translation?: unknown;
     };
 
     const reply = typeof parsed.reply === "string" ? parsed.reply.trim() : "";
-    const translation = typeof parsed.translation === "string" ? parsed.translation.trim() : "";
 
     if (reply) {
       return {
         text: reply,
-        translation: translation || null,
+        translation: null,
         provider,
         model,
         liveModelCall: true
@@ -587,7 +573,7 @@ async function analyzeVoiceTurnWithGemini(context: ScenarioVoiceContext): Promis
     ...buildLearnerProfileLines(context),
     context.referenceText ? `Target phrase the learner intended to say: ${context.referenceText}` : "",
     "Analyze the audio and return JSON only.",
-    "Required JSON keys: transcript, pronunciation, tutorReply, translation.",
+    "Required JSON keys: transcript, pronunciation, tutorReply.",
     "pronunciation must include overallScore, accuracyScore, fluencyScore, feedback, issues.",
     "issues must be an array with up to 4 objects.",
     "Each issue object must contain: label, issueCount, severity, affectedWord, expectedSound, heardApproximation, hint.",
@@ -601,10 +587,7 @@ async function analyzeVoiceTurnWithGemini(context: ScenarioVoiceContext): Promis
     "Use the scenario context and learner profile to choose the right detail level.",
     "Avoid generic filler, repetition, and vague encouragement.",
     "tutorReply must be Hebrew only.",
-    "translation must be a concise support translation in the learner native language only.",
-    "Never include the learner native language, English, or transliteration inside tutorReply.",
-    "All non-Hebrew support text must go in translation only.",
-    context.native ? `Learner native language: ${context.native}` : "Learner native language: English"
+    "Never include the learner native language, English, or transliteration inside tutorReply."
   ]
     .filter(Boolean)
     .join("\n");
@@ -662,7 +645,6 @@ async function analyzeVoiceTurnWithGemini(context: ScenarioVoiceContext): Promis
     transcript?: string;
     pronunciation?: unknown;
     tutorReply?: string;
-    translation?: string;
   };
   const transcript = parsed.transcript?.trim() || "";
 
@@ -675,7 +657,7 @@ async function analyzeVoiceTurnWithGemini(context: ScenarioVoiceContext): Promis
     pronunciation: normalizePronunciation(parsed.pronunciation, "audio"),
     tutorReply: {
       text: parsed.tutorReply?.trim() || "Tell me that one more time, slowly.",
-      translation: parsed.translation?.trim() || null,
+      translation: null,
       provider: "gemini",
       model: config.geminiAudioModel,
       liveModelCall: true
