@@ -207,6 +207,44 @@ function isHebrewOnlyInput(text: string): boolean {
   return !/[A-Za-z]/.test(trimmed) && /^[\u0590-\u05FF0-9\s.,!?'"():;+\-/%]+$/u.test(trimmed);
 }
 
+function normalizeHebrewForComparison(text: string): string {
+  return text
+    .trim()
+    .replace(/[\u0591-\u05C7]/g, "")
+    .replace(/[^\u0590-\u05FF0-9\s]/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+function computeReferenceAccuracy(referenceText?: string, actualText?: string): number | null {
+  const reference = normalizeHebrewForComparison(referenceText || "");
+  const actual = normalizeHebrewForComparison(actualText || "");
+
+  if (!reference || !actual) {
+    return null;
+  }
+
+  const referenceTokens = reference.split(" ").filter(Boolean);
+  const actualTokens = actual.split(" ").filter(Boolean);
+
+  if (referenceTokens.length === 0 || actualTokens.length === 0) {
+    return null;
+  }
+
+  let matched = 0;
+  const remaining = [...actualTokens];
+
+  for (const token of referenceTokens) {
+    const index = remaining.indexOf(token);
+
+    if (index >= 0) {
+      matched += 1;
+      remaining.splice(index, 1);
+    }
+  }
+
+  return Math.max(0, Math.min(100, Math.round((matched / referenceTokens.length) * 100)));
+}
+
 async function getOwnedSession(userUid: string, sessionId: string) {
   const sessionRef = db.collection("users").doc(userUid).collection("scenarioSessions").doc(sessionId);
   const snapshot = await sessionRef.get();
@@ -647,7 +685,6 @@ router.post(
     };
 
     let tutorReply = "";
-    let tutorTranslation: string | null = null;
     let liveModelCall = false;
 
     try {
@@ -668,7 +705,6 @@ router.post(
       });
 
       tutorReply = providerResult.text;
-      tutorTranslation = providerResult.translation || null;
       liveModelCall = providerResult.liveModelCall;
     } catch (providerError) {
       console.error("[scenario:message] AI provider call failed:", providerError instanceof Error ? providerError.message : providerError);
@@ -696,7 +732,7 @@ router.post(
     const tutorTurn = {
       role: "tutor",
       text: tutorReply,
-      translation: tutorTranslation,
+      translation: null,
       createdAt: new Date().toISOString(),
       provider,
       model,
@@ -786,6 +822,7 @@ router.post(
     const mimeType = typeof body.mimeType === "string" && body.mimeType.trim() ? body.mimeType.trim() : "audio/mp4";
     const fileName = typeof body.fileName === "string" && body.fileName.trim() ? body.fileName.trim() : "learner-audio.m4a";
     const referenceText = typeof body.referenceText === "string" ? body.referenceText.trim() : "";
+    const startedAt = Date.now();
 
     if (!audioBase64) {
       throw new AppError(400, "MISSING_SCENARIO_AUDIO", "Scenario voice request requires a non-empty audioBase64 field.");
@@ -823,6 +860,11 @@ router.post(
       details: {
         sessionId,
         transcript: transcriptResult.transcript,
+        metrics: {
+          hebrewOnly: true,
+          transcriptionLatencyMs: Date.now() - startedAt,
+          transcriptAccuracy: computeReferenceAccuracy(referenceText, transcriptResult.transcript)
+        },
         learnerTurn: {
           role: "learner",
           text: transcriptResult.transcript,
@@ -864,6 +906,7 @@ router.post(
     const theme = session.theme || { id: "supermarket", title: "Scenario" };
     const model = provider === "openai" ? config.openAiTranscriptionModel : config.geminiAudioModel;
     const providerConfigured = provider === "openai" ? Boolean(config.openAiApiKey) : Boolean(config.geminiApiKey);
+    const startedAt = Date.now();
 
     let pronunciation;
     let tutorReply;
@@ -930,7 +973,7 @@ router.post(
     const tutorTurn = {
       role: "tutor",
       text: tutorReply.text,
-      translation: tutorReply.translation || null,
+      translation: null,
       createdAt: new Date().toISOString(),
       provider,
       model: tutorReply.model || model,
@@ -958,6 +1001,12 @@ router.post(
         model: tutorTurn.model,
         transcript,
         pronunciation,
+        metrics: {
+          hebrewOnly: true,
+          responseLatencyMs: Date.now() - startedAt,
+          transcriptAccuracy: computeReferenceAccuracy(referenceText, transcript),
+          scenarioThemeId: theme.id || "supermarket"
+        },
         learnerTurn,
         tutorTurn
       }
@@ -985,6 +1034,7 @@ router.post(
     const theme = session.theme || { id: "supermarket", title: "Scenario" };
     const model = provider === "openai" ? config.openAiTranscriptionModel : config.geminiAudioModel;
     const providerConfigured = provider === "openai" ? Boolean(config.openAiApiKey) : Boolean(config.geminiApiKey);
+    const startedAt = Date.now();
 
     const voiceResult = await generateScenarioVoiceReply({
       provider,
@@ -1016,7 +1066,7 @@ router.post(
     const tutorTurn = {
       role: "tutor",
       text: voiceResult.tutorReply.text,
-      translation: voiceResult.tutorReply.translation || null,
+      translation: null,
       createdAt: new Date().toISOString(),
       provider,
       model: voiceResult.tutorReply.model,
@@ -1044,6 +1094,12 @@ router.post(
         model,
         transcript: voiceResult.transcript,
         pronunciation: voiceResult.pronunciation,
+        metrics: {
+          hebrewOnly: true,
+          responseLatencyMs: Date.now() - startedAt,
+          transcriptAccuracy: computeReferenceAccuracy(referenceText, voiceResult.transcript),
+          scenarioThemeId: theme.id || "supermarket"
+        },
         learnerTurn,
         tutorTurn
       }

@@ -155,7 +155,7 @@ export function attachRealtimeScenarioServer(httpServer: HttpServer) {
           const tutorTurn = {
             role: "tutor",
             text: tutorReply.text,
-            translation: tutorReply.translation || null,
+            translation: null,
             createdAt: new Date().toISOString(),
             provider,
             model: tutorReply.model || model,
@@ -292,7 +292,7 @@ export function attachRealtimeScenarioServer(httpServer: HttpServer) {
           const tutorTurn = {
             role: "tutor",
             text: tutorReply.text,
-            translation: tutorReply.translation || null,
+            translation: null,
             createdAt: new Date().toISOString(),
             provider,
             model: tutorReply.model || model,
