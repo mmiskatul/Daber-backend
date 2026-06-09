@@ -32,6 +32,16 @@ OPENAI_SCENARIO_MODEL=gpt-4.1-mini
 OPENAI_TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
 OPENAI_TTS_MODEL=gpt-4o-mini-tts
 ```
+For local RTC voice scaffolding, also set:
+
+```env
+OPENAI_REALTIME_MODEL=gpt-realtime
+OPENAI_REALTIME_VOICE=coral
+VOICE_FEATURE_RTC_ENABLED=true
+VOICE_GATEWAY_PUBLIC_BASE_URL=http://localhost:4000
+VOICE_GATEWAY_INTERNAL_BASE_URL=http://localhost:4000
+TURN_PUBLIC_URL=turn:127.0.0.1:3478?transport=udp
+```
 4. Install dependencies:
 
 ```bash
@@ -48,6 +58,12 @@ Swagger UI will be available at:
 
 ```bash
 http://localhost:4000/docs
+```
+
+The RTC control-plane scaffold is exposed at:
+
+```bash
+http://localhost:4000/voice/rtc/session
 ```
 
 Type-check the backend:

@@ -2,6 +2,9 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+const resolvedPort = Number(process.env.PORT || 4000);
+const localBackendBaseUrl = `http://localhost:${resolvedPort}`;
+
 type EnvConfig = {
   port: number;
   firebaseProjectId: string;
@@ -49,7 +52,7 @@ function normalizePrivateKey(value: string): string {
 }
 
 export const config: EnvConfig = {
-  port: Number(process.env.PORT || 4000),
+  port: resolvedPort,
   firebaseProjectId: getEnv("FIREBASE_PROJECT_ID"),
   firebaseClientEmail: getEnv("FIREBASE_CLIENT_EMAIL"),
   firebasePrivateKey: normalizePrivateKey(getEnv("FIREBASE_PRIVATE_KEY")),
@@ -69,8 +72,8 @@ export const config: EnvConfig = {
   redisUrl: getOptionalEnv("REDIS_URL"),
   turnSecret: getOptionalEnv("TURN_SECRET"),
   turnPublicUrl: getOptionalEnv("TURN_PUBLIC_URL"),
-  voiceGatewayPublicBaseUrl: getOptionalEnv("VOICE_GATEWAY_PUBLIC_BASE_URL"),
-  voiceGatewayInternalBaseUrl: getOptionalEnv("VOICE_GATEWAY_INTERNAL_BASE_URL"),
+  voiceGatewayPublicBaseUrl: getOptionalEnv("VOICE_GATEWAY_PUBLIC_BASE_URL", localBackendBaseUrl),
+  voiceGatewayInternalBaseUrl: getOptionalEnv("VOICE_GATEWAY_INTERNAL_BASE_URL", localBackendBaseUrl),
   voiceSessionTtlSeconds: Number(process.env.VOICE_SESSION_TTL_SECONDS || 900),
   pronunciationQueueUrl: getOptionalEnv("PRONUNCIATION_QUEUE_URL"),
   voiceFeatureRtcEnabled: process.env.VOICE_FEATURE_RTC_ENABLED === "true"
