@@ -4,6 +4,7 @@ import swaggerUi from "swagger-ui-express";
 import authRoutes from "./routes/auth";
 import onboardingRoutes from "./routes/onboarding";
 import scenarioRoutes from "./routes/scenarios";
+import voiceRtcRoutes from "./routes/voiceRtc";
 import swaggerSpec from "./swagger";
 import { errorHandler } from "./middleware/errorHandler";
 
@@ -56,6 +57,7 @@ app.get("/health", (_req, res) => {
 app.use("/auth", authRoutes);
 app.use("/onboarding", onboardingRoutes);
 app.use("/scenarios", scenarioRoutes);
+app.use("/voice", voiceRtcRoutes);
 app.use(errorHandler);
 
 export { app };
