@@ -5,10 +5,10 @@
   "description": "Express backend for Daber Firebase-authenticated users",
   "main": "dist/server.js",
   "scripts": {
-    "build": "node api.js && tsc --project tsconfig.json",
+    "build": "tsc --project tsconfig.json",
     "typecheck": "tsc --project tsconfig.json --noEmit",
-    "dev": "node api.js && nodemon --watch src --ext ts --exec tsx src/server.ts",
-    "start": "node api.js && node dist/server.js"
+    "dev": "nodemon --watch src --ext ts --exec tsx src/server.ts",
+    "start": "node dist/server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
